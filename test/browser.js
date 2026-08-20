@@ -55,10 +55,10 @@ function check(name, ok, detail) {
   check('generator renders a preview',
     await page.locator('#preview svg').count() === 1);
 
-  /* Three L-marks (2 rects each) plus a T (3 rects). */
+  /* Three L-marks (2 rects) plus a 5-module alignment square (9 runs). */
   const markerRects = await page.evaluate(() =>
     window.PS.marker.ops('A4', 'P').length);
-  check('four markers are drawn as vector runs', markerRects === 9, `${markerRects} rects`);
+  check('four markers are drawn as vector runs', markerRects === 15, `${markerRects} rects`);
 
   /* every template must render without throwing */
   for (const t of await page.evaluate(() => window.PS.templates.LIST.map(x => x.id))) {

@@ -28,8 +28,8 @@ from a plain file path.
 ### The markers
 
 Each sheet carries four thick registration marks hugging the page edges: an
-**L** at three corners and a **T** at the fourth. The arms sit in the margin;
-the open diagonal is left for writing.
+**L** at three corners and a five-module **alignment square** at the fourth.
+The L arms sit in the margin; the open diagonal is left for writing.
 
 ```
   ████████              ████████
@@ -38,35 +38,37 @@ the open diagonal is left for writing.
   ██                          ██
 
 
-  ██                          ██
-  ██                     ████████
-  ██                          ██
-  ████████         ████████████████
+  ██                     █████
+  ██                     █   █
+  ██                     █ █ █
+  ████████               █   █
+                         █████
 ```
 
-They carry **no payload**. That is the whole point: a data-carrying symbol needs
-fine modules that survive poorly in a hand-held photograph. A 2.2mm stroke is
-coarse enough to read through blur and grain, and because the mark is only two
-(or three) arms rather than a filled square, the keep-out is a thin strip along
-each edge instead of a block into the content.
+Three L-marks and, at BR, a five-module alignment square. They carry **no
+payload**. That is the whole point: a data-carrying symbol needs fine modules
+that survive poorly in a hand-held photograph. A 2.2mm stroke is coarse enough
+to read through blur and grain, and because each L is only two arms rather than
+a filled square, the keep-out is a thin strip along each edge instead of a
+block into the content.
 
 What the markers no longer say, the geometry has to supply:
 
 | | |
 |---|---|
-| **which corner is which** | The T is printed at one corner only. Find it and the sheet's rotation is fixed; the other three follow from the winding order, which a photograph preserves because paper cannot be mirrored. |
+| **which corner is which** | The alignment square is printed at one corner only. Find it and the sheet's rotation is fixed; the other three follow from the winding order, which a photograph preserves because paper cannot be mirrored. |
 | **orientation** | Compare a horizontal marker span with a vertical one. Any three of the four give one of each. |
 | **paper size** | Cannot be recovered. A3, A4 and A5 are the same shape, and nothing in a photograph gives absolute scale. **You tell the scan view which paper you printed on**; it defaults to A4. |
 
 ### The fiducial
 
-The one point per marker whose position is known exactly is its **inner crook**
-— where the two inner edges meet. It is recovered by averaging every scan that
-hit the junction, which puts it well inside a pixel, and unlike a free corner
-it does not drift when the stroke blurs.
+The one point per L whose position is known exactly is its **joint centre** —
+where the two arm midlines meet. It is recovered by averaging edge samples
+along both arms, which puts it well inside a pixel. The alignment square's
+fiducial is its own centre, averaged over every line that crossed its core.
 
-Every mark's outer face sits 5mm from the page edge, so the four crooks form a
-rectangle inset 7.2mm on all sides, whatever the paper size.
+Every mark sits so the four fiducials form a rectangle inset 6.1mm on all sides,
+whatever the paper size.
 
 Four known points and four measured points give a **homography**: the full
 projective map from page millimetres to photo pixels. That is what lets a photo
@@ -75,8 +77,8 @@ rotation. If only three markers are readable the scanner falls back to an affine
 fit, which is exact for a flatbed scan and approximate for an angled photo; pages
 that took this path are labelled *3 markers* in the capture list.
 
-Because the T names the bottom-right corner, a sheet photographed upside down
-or turned sideways rectifies correctly with no user input.
+Because the alignment square names the bottom-right corner, a sheet photographed
+upside down or turned sideways rectifies correctly with no user input.
 
 ### Generating
 
@@ -96,13 +98,12 @@ blanking the open corner.
 ### Scanning
 
 1. **Detect.** Shrink the frame until a 2.2mm stroke is still a few pixels
-   across, threshold it locally, then walk the frame looking for L-crooks: two
-   long dark runs along neighbouring axes (the arms) and short runs through the
-   stroke toward the page edge. A T is the same crook with ink in the open
-   diagonal (the stem block). Hits that cluster on the same spot are averaged
-   into a sub-pixel crook. The four that best describe a sheet are then re-read
-   from tight full-resolution crops. No external decoder is involved:
-   `src/finder.js` stays small.
+   across, threshold it locally, then walk the outer band looking for L-crooks
+   (two long arms, short edge-through-stroke runs) and for the alignment
+   square's **1:1:1:1:1** cross-section. Hits that cluster on the same spot are
+   refined — L joints via arm midlines, the alignment square via its centre —
+   and the four that best describe a sheet are re-read from tight
+   full-resolution crops. No external decoder is involved.
 2. **Rectify.** Warp from photo pixels onto a page-millimetre lattice. Output
    resolution is capped at what the source actually resolved — upsampling past
    that only inflates the file.
@@ -147,21 +148,21 @@ ink lands after a full detect-and-rectify cycle.
 | capture | markers | worst ink error |
 |---|---|---|
 | A4 portrait, flat | 4/4 | 0.12 mm |
-| A4 portrait, moderate angle | 4/4 | 0.15 mm |
-| A4 portrait, steep angle | 4/4 | 0.14 mm |
-| A4 portrait, upside down | 4/4 | 0.05 mm |
-| A4 landscape | 4/4 | 0.15 mm |
-| A5 portrait / landscape | 4/4 | 0.13 mm |
-| Letter portrait | 4/4 | 0.15 mm |
-| Legal portrait | 4/4 | 0.13 mm |
-| A3 landscape | 4/4 | 0.17 mm |
-| A4, dim and grainy | 4/4 | 0.14 mm |
-| A4, small capture | 4/4 | 0.17 mm |
-| A4 flatbed, one corner clipped | 3/4 (affine) | 0.16 mm |
+| A4 portrait, moderate angle | 4/4 | 0.08 mm |
+| A4 portrait, steep angle | 4/4 | 0.36 mm |
+| A4 portrait, upside down | 4/4 | 0.21 mm |
+| A4 landscape | 4/4 | 0.13 mm |
+| A5 portrait / landscape | 4/4 | 0.11 mm |
+| Letter portrait | 4/4 | 0.08 mm |
+| Legal portrait | 4/4 | 0.07 mm |
+| A3 landscape | 4/4 | 0.27 mm |
+| A4, dim and grainy | 4/4 | 0.11 mm |
+| A4, small capture | 4/4 | 0.11 mm |
+| A4 flatbed, one corner clipped | 3/4 (affine) | 0.45 mm |
 
-Printed rules return to their stated positions within 0.03mm, and markers in a
+Printed rules return to their stated positions within 0.20mm, and markers in a
 generated PDF sit within 0.12mm of spec when re-read from a 300dpi render.
-Detection takes about 150–250ms on a 2000×2700 frame.
+Detection takes about 80–160ms on a 2000×2700 frame.
 
 ### Where it stops working
 
@@ -174,7 +175,7 @@ Measured on a 2000×2700 capture of A4 (a modest phone photo):
   read, and fewer than three leaves nothing to rectify from.
 - A mark wants roughly **20 pixels along each arm**, so on A4 all four markers
   survive down to a capture of about **420 pixels on the long side**; three
-  survive to about 300 (the T's stem, being the extra cue, goes soft first).
+  survive to about 300 (the alignment square, being smaller, goes first).
   Larger paper needs proportionally more.
 - Paper size is not in the markers. Scanning an A5 sheet with the control set to
   A4 gives a correctly squared page at the wrong physical size.
@@ -188,12 +189,12 @@ index.html          markup
 styles.css          flat design system
 src/core.js         paper sizes and marker geometry — shared by both halves
 src/templates.js    page rulings as draw ops
-src/marker.js       L/T marks as vector rects
+src/marker.js       L marks and BR alignment square as vector rects
 src/render.js       draw ops -> SVG preview / PDF content
 src/generator.js    sheet composition and export
 src/pdf.js          minimal PDF 1.4 writer
 src/geom.js         homography, perspective warp, flat-field, tone map, despeckle
-src/finder.js       L/T crook search
+src/finder.js       L-crook and alignment-square search
 src/scanner.js      marker detection and rectification
 src/pages.js        capture store, thumbnails, scanned-document PDF
 src/icons.js        inline Lucide glyphs

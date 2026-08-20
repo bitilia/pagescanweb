@@ -87,7 +87,8 @@ window.PS = window.PS || {};
     return found.slice(0, MAX_CANDIDATES).map(function (c) {
       return {
         x: (img.ox || 0) + c.x * back, y: (img.oy || 0) + c.y * back,
-        module: c.module * back, kind: c.kind, support: c.support
+        module: c.module * back, kind: c.kind, support: c.support,
+        ox: c.ox, oy: c.oy
       };
     });
   }

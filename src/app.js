@@ -72,8 +72,7 @@
     body += '<rect x="2" y="2" width="5" height="1.2" opacity="0.9"/><rect x="2" y="2" width="1.2" height="5" opacity="0.9"/>';
     body += '<rect x="23" y="2" width="5" height="1.2" opacity="0.9"/><rect x="26.8" y="2" width="1.2" height="5" opacity="0.9"/>';
     body += '<rect x="2" y="36.8" width="5" height="1.2" opacity="0.9"/><rect x="2" y="33" width="1.2" height="5" opacity="0.9"/>';
-    body += '<rect x="23" y="36.8" width="5" height="1.2" opacity="0.9"/><rect x="26.8" y="33" width="1.2" height="5" opacity="0.9"/>';
-    body += '<rect x="23.5" y="33.5" width="3.2" height="3.2" opacity="0.9"/>';
+    body += '<rect x="24.2" y="34.2" width="4.2" height="4.2" rx="0.3" opacity="0.9"/>';
     return '<svg class="tile__art" viewBox="0 0 30 40" fill="currentColor" aria-hidden="true">' + body + '</svg>';
   }
 
@@ -143,7 +142,7 @@
       ['Sheet', PS.PAPER[gen.paper].label + ' ' + (gen.orientation === 'L' ? 'landscape' : 'portrait')],
       ['Size', sheet.w + ' × ' + sheet.h + ' mm'],
       [t.spacing ? 'Spacing' : 'Ruling', t.spacing ? gen.spacing + ' mm' : t.label],
-      ['Markers', '3 × L + 1 × T · ' + PS.MARK.width + ' × ' + PS.MARK.length + ' mm']
+      ['Markers', '3 × L ' + PS.MARK.length + ' mm + align ' + PS.MARK.align + ' mm']
     ];
     $('preview-facts').innerHTML = facts.map(function (f) {
       return '<div><dt>' + f[0] + '</dt><dd>' + f[1] + '</dd></div>';

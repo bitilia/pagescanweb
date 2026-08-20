@@ -87,7 +87,7 @@ function detectedRuleRows(page) {
   /* Measure only the span where a rule is actually drawn: rules are clipped
      out of the marker keep-outs, and a corner mark darkens its arm rows
      enough to drown one out. Vertically only the page-edge trim is skipped. */
-  const trim = Math.round((PS.MARK.edge + PS.MARK.length + PS.MARK.quiet) * s);
+  const trim = Math.round((PS.MARK.edge + Math.max(PS.MARK.length, PS.MARK.align) + PS.MARK.quiet) * s);
   const vtrim = Math.round(3 * s);
   const rowMean = new Float64Array(page.height);
   for (let y = 0; y < page.height; y++) {
