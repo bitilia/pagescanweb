@@ -157,21 +157,21 @@ ink lands after a full detect-and-rectify cycle.
 | capture | markers | worst ink error |
 |---|---|---|
 | A4 portrait, flat | 4/4 | 0.12 mm |
-| A4 portrait, moderate angle | 4/4 | 0.15 mm |
+| A4 portrait, moderate angle | 4/4 | 0.12 mm |
 | A4 portrait, steep angle | 4/4 | 0.14 mm |
 | A4 portrait, upside down | 4/4 | 0.05 mm |
-| A4 landscape | 4/4 | 0.15 mm |
+| A4 landscape | 4/4 | 0.13 mm |
 | A5 portrait / landscape | 4/4 | 0.13 mm |
-| Letter portrait | 4/4 | 0.15 mm |
+| Letter portrait | 4/4 | 0.12 mm |
 | Legal portrait | 4/4 | 0.13 mm |
 | A3 landscape | 4/4 | 0.17 mm |
 | A4, dim and grainy | 4/4 | 0.14 mm |
-| A4, small capture | 4/4 | 0.17 mm |
-| A4 flatbed, one corner clipped | 3/4 (affine) | 0.16 mm |
+| A4, small capture | 4/4 | 0.18 mm |
+| A4 flatbed, one corner clipped | 3/4 (affine) | 0.14 mm |
 
 Printed rules return to their stated positions within 0.03mm, and markers in a
 generated PDF sit within 0.12mm of spec when re-read from a 300dpi render.
-Detection takes about 150–250ms on a 2000×2700 frame.
+Detection takes about 80–200ms on a 2000×2700 frame.
 
 ### Where it stops working
 
