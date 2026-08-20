@@ -8,7 +8,7 @@ window.PS = window.PS || {};
   var MM_PER_IN = 25.4;
   var PT_PER_MM = 72 / MM_PER_IN;
 
-  /* Paper stocks. Codes are two chars so they fit QR alphanumeric mode. */
+  /* Paper stocks. */
   var PAPER = {
     A3: { code: 'A3', label: 'A3', w: 297, h: 420 },
     A4: { code: 'A4', label: 'A4', w: 210, h: 297 },
@@ -18,33 +18,46 @@ window.PS = window.PS || {};
   };
   var PAPER_ORDER = ['A4', 'A5', 'A3', 'LT', 'LG'];
 
-  /* Corner marker geometry, in mm. These four numbers are the contract
-   * between print and scan: the fiducial is each marker's outward corner,
-   * so the reference rectangle is inset by MARK.inset on every side. */
+  /* Corner marker geometry, in mm.
+   *
+   * The markers are the plain registration patterns every QR code carries in
+   * its own corners: a seven-module finder square at three corners and the
+   * five-module alignment square at the fourth. Nothing is encoded in them —
+   * they are pure position, which is why their modules can be 2.2mm across
+   * instead of the 0.6mm a data-carrying symbol needs at this size.
+   *
+   * The fiducial is each marker's CENTRE. A centre is recovered by averaging
+   * dozens of scan lines, so it is far steadier under blur and perspective
+   * than any corner of a symbol, and the four of them form a rectangle inset
+   * by MARK.inset on every side whatever the paper.
+   *
+   * Which corner carries the odd one out is what tells the scanner which way
+   * up the sheet is — the same trick a QR code plays with its three eyes. */
   var MARK = {
-    size: 15,        // side length of the QR symbol itself
-    inset: 6,        // page edge -> outward corner of the symbol
-    modules: 25,     // QR version 2 == 25x25 modules
-    quietModules: 4  // required silent margin, kept clear of rules
+    module: 2.2,       // one module, printed
+    finderModules: 7,  // the familiar QR eye: ring, gap, core
+    alignModules: 5,   // the smaller alignment square
+    edge: 6,           // page edge -> outer edge of a finder square
+    quietModules: 2    // silent margin kept clear of rules
   };
-  MARK.quiet = MARK.quietModules * (MARK.size / MARK.modules); // 2.4mm
+  /* Rounded so the millimetres that reach the PDF and the SVG are the exact
+   * decimals quoted here, not 15.400000000000002. */
+  function mm(v) { return Math.round(v * 1e6) / 1e6; }
+  MARK.finder = mm(MARK.finderModules * MARK.module);  // 15.4mm
+  MARK.align = mm(MARK.alignModules * MARK.module);    // 11.0mm
+  MARK.quiet = mm(MARK.quietModules * MARK.module);    // 4.4mm
+  MARK.inset = mm(MARK.edge + MARK.finder / 2);        // 13.7mm, edge -> centre
 
   var CORNERS = ['TL', 'TR', 'BR', 'BL'];
+  var ALIGN_CORNER = 'BR';   // the one that differs, so "up" is never in doubt
 
-  /* ---- payload codec -------------------------------------------------- *
-   * "PS1:A4:P:TL" — 11 chars, all inside QR alphanumeric mode, which keeps
-   * the symbol at version 2 even at error-correction level H.            */
-  var PAYLOAD_RE = /^PS1:([A-Z0-9]{2}):([PL]):(TL|TR|BR|BL)$/;
-
-  function encodePayload(paperCode, orientation, corner) {
-    return 'PS1:' + paperCode + ':' + orientation + ':' + corner;
+  function markKind(corner) {
+    return corner === ALIGN_CORNER ? 'align' : 'finder';
   }
 
-  function decodePayload(text) {
-    var m = PAYLOAD_RE.exec(String(text || '').trim());
-    if (!m) return null;
-    if (!PAPER[m[1]]) return null;
-    return { paper: m[1], orientation: m[2], corner: m[3] };
+  /* Side length of the marker at a given corner. */
+  function markSpan(corner) {
+    return corner === ALIGN_CORNER ? MARK.align : MARK.finder;
   }
 
   /* Outer dimensions of a sheet once orientation is applied. */
@@ -56,41 +69,37 @@ window.PS = window.PS || {};
       : { w: p.w, h: p.h };
   }
 
-  /* The four fiducials in page space (mm, origin top-left, y down).
-   * Order matches CORNERS. */
+  /* The four fiducials — marker centres — in page space (mm, origin
+   * top-left, y down). Order matches CORNERS. */
   function fiducials(paperCode, orientation) {
     var s = sheetSize(paperCode, orientation), i = MARK.inset;
     return {
       TL: { x: i, y: i },
-      TR: { x: s.w - i, y: i },
-      BR: { x: s.w - i, y: s.h - i },
-      BL: { x: i, y: s.h - i }
+      TR: { x: mm(s.w - i), y: i },
+      BR: { x: mm(s.w - i), y: mm(s.h - i) },
+      BL: { x: i, y: mm(s.h - i) }
     };
   }
 
   /* Bounding box of each marker plus its quiet zone. Template rules are
-   * clipped out of these so nothing intrudes on the symbol. */
+   * clipped out of these so nothing intrudes on the pattern. */
   function keepouts(paperCode, orientation) {
-    var s = sheetSize(paperCode, orientation);
-    var i = MARK.inset, z = MARK.size, q = MARK.quiet;
-    var a = i - q, b = z + 2 * q;
-    return [
-      { x: a, y: a, w: b, h: b },
-      { x: s.w - a - b, y: a, w: b, h: b },
-      { x: s.w - a - b, y: s.h - a - b, w: b, h: b },
-      { x: a, y: s.h - a - b, w: b, h: b }
-    ];
+    var c = fiducials(paperCode, orientation);
+    return CORNERS.map(function (corner) {
+      var half = markSpan(corner) / 2 + MARK.quiet;
+      return { x: mm(c[corner].x - half), y: mm(c[corner].y - half), w: mm(half * 2), h: mm(half * 2) };
+    });
   }
 
-  /* Top-left origin of each marker symbol. */
+  /* Top-left corner of each marker's own square, for drawing. */
   function markOrigins(paperCode, orientation) {
-    var s = sheetSize(paperCode, orientation), i = MARK.inset, z = MARK.size;
-    return {
-      TL: { x: i, y: i },
-      TR: { x: s.w - i - z, y: i },
-      BR: { x: s.w - i - z, y: s.h - i - z },
-      BL: { x: i, y: s.h - i - z }
-    };
+    var c = fiducials(paperCode, orientation);
+    var out = {};
+    CORNERS.forEach(function (corner) {
+      var half = markSpan(corner) / 2;
+      out[corner] = { x: mm(c[corner].x - half), y: mm(c[corner].y - half) };
+    });
+    return out;
   }
 
   PS.MM_PER_IN = MM_PER_IN;
@@ -99,8 +108,10 @@ window.PS = window.PS || {};
   PS.PAPER_ORDER = PAPER_ORDER;
   PS.MARK = MARK;
   PS.CORNERS = CORNERS;
-  PS.encodePayload = encodePayload;
-  PS.decodePayload = decodePayload;
+  PS.ALIGN_CORNER = ALIGN_CORNER;
+  PS.mm = mm;
+  PS.markKind = markKind;
+  PS.markSpan = markSpan;
   PS.sheetSize = sheetSize;
   PS.fiducials = fiducials;
   PS.keepouts = keepouts;

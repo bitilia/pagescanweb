@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PageScan — printable sheets with QR corners</title>
-<meta name="description" content="Generate ruled, squared, graph, dot grid, Cornell and music sheets with QR corner markers. Print them, write on them, scan them back into a PDF.">
+<title>PageScan — printable sheets with QR corner markers</title>
+<meta name="description" content="Generate ruled, squared, graph, dot grid, Cornell and music sheets with QR registration markers in the corners. Print them, write on them, scan them back into a PDF.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233B82F6'/%3E%3Crect x='9' y='9' width='14' height='14' rx='3' fill='white'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="vendor/outfit/outfit.css">
 <link rel="stylesheet" href="styles.css">
@@ -35,8 +35,8 @@
     <div class="wrap band__inner">
       <p class="band__eyebrow">Step one</p>
       <h1 class="band__title">Make a sheet<br>you can scan back.</h1>
-      <p class="band__lead">Four QR corners tell the scanner the paper size, the orientation and
-        which corner it is looking at — so a photo taken at any angle comes back square.</p>
+      <p class="band__lead">Four QR-style registration corners give the scanner four points it
+        knows the position of — so a photo taken at any angle comes back square.</p>
     </div>
   </div>
 
@@ -119,13 +119,22 @@
       <p class="band__eyebrow">Step two</p>
       <h1 class="band__title">Scan it back<br>into a PDF.</h1>
       <p class="band__lead">Photograph or scan your written-on sheets. Every page is squared up
-        from its corner markers, cleaned, and stacked into one downloadable PDF.</p>
+        from its corner markers, cleaned, and stacked into one downloadable PDF.
+        Tell it which paper you printed on — the markers carry no data, and A4, A5
+        and A3 are the same shape.</p>
     </div>
   </div>
 
   <div class="wrap layout layout--scan">
 
     <div class="controls">
+
+      <fieldset class="group">
+        <legend class="group__label">Paper printed on</legend>
+        <div class="segments" id="scan-paper-segments"></div>
+        <p class="group__hint">Orientation and which corner is which are worked out from the
+          markers; only the size has to be told.</p>
+      </fieldset>
 
       <fieldset class="group">
         <legend class="group__label">Source</legend>
@@ -222,8 +231,6 @@
   </div>
 </footer>
 
-<script src="vendor/qrcode.js"></script>
-<script src="vendor/jsQR.js"></script>
 <script src="src/core.js"></script>
 <script src="src/pdf.js"></script>
 <script src="src/templates.js"></script>
@@ -231,6 +238,7 @@
 <script src="src/render.js"></script>
 <script src="src/generator.js"></script>
 <script src="src/geom.js"></script>
+<script src="src/finder.js"></script>
 <script src="src/scanner.js"></script>
 <script src="src/pages.js"></script>
 <script src="src/icons.js"></script>

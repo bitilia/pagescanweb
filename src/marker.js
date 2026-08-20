@@ -1,31 +1,52 @@
 /* PageScan — corner markers.
- * Four QR symbols, one per corner, each naming the paper size, orientation
- * and which corner it is. Drawn as merged vector runs rather than a raster
- * so they stay razor-sharp at any print resolution. */
+ * The registration patterns a QR code carries in its own corners, printed on
+ * their own: a seven-module finder square at three corners and the smaller
+ * five-module alignment square at the fourth. They carry no data, which is the
+ * point — a module is 2.2mm rather than 0.6mm, so the marker survives a phone
+ * photograph with room to spare. Drawn as merged vector runs rather than a
+ * raster so they stay razor-sharp at any print resolution. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
+  /* Ring, gap, core — the 1:1:3:1:1 cross-section is what the scanner hunts
+   * for along every row and column of the photograph. */
+  var PATTERN = {
+    finder: [
+      '1111111',
+      '1000001',
+      '1011101',
+      '1011101',
+      '1011101',
+      '1000001',
+      '1111111'
+    ],
+    align: [
+      '11111',
+      '10001',
+      '10101',
+      '10001',
+      '11111'
+    ]
+  };
+
   var cache = Object.create(null);
 
-  /* Version 2 / ECC level H holds 20 alphanumeric characters; our payload is
-   * 11, so the symbol is always 25x25 and the geometry is fixed. */
-  function matrix(text) {
-    if (cache[text]) return cache[text];
-    var q = qrcode(2, 'H');
-    q.addData(text, 'Alphanumeric');
-    q.make();
-    var size = q.getModuleCount();
+  function matrix(kind) {
+    if (cache[kind]) return cache[kind];
+    var rows = PATTERN[kind];
+    if (!rows) throw new Error('unknown marker ' + kind);
+    var size = rows.length;
     var cells = new Uint8Array(size * size);
     for (var r = 0; r < size; r++) {
-      for (var c = 0; c < size; c++) if (q.isDark(r, c)) cells[r * size + c] = 1;
+      for (var c = 0; c < size; c++) cells[r * size + c] = rows[r].charCodeAt(c) === 49 ? 1 : 0;
     }
     var m = { size: size, cells: cells };
-    cache[text] = m;
+    cache[kind] = m;
     return m;
   }
 
-  /* Collapse each row into runs so one marker costs ~90 rects, not 300. */
+  /* Collapse each row into runs, so a finder costs 15 rects rather than 33. */
   function runs(m) {
     var out = [];
     for (var r = 0; r < m.size; r++) {
@@ -43,17 +64,17 @@ window.PS = window.PS || {};
   /* Draw ops for all four markers of a sheet, in mm. */
   function ops(paperCode, orientation) {
     var origins = PS.markOrigins(paperCode, orientation);
+    var unit = PS.MARK.module;
     var out = [];
     PS.CORNERS.forEach(function (corner) {
-      var m = matrix(PS.encodePayload(paperCode, orientation, corner));
-      var unit = PS.MARK.size / m.size;
+      var m = matrix(PS.markKind(corner));
       var o = origins[corner];
       runs(m).forEach(function (run) {
         out.push({
           k: 'rect',
-          x: o.x + run.col * unit,
-          y: o.y + run.row * unit,
-          w: run.len * unit,
+          x: PS.mm(o.x + run.col * unit),
+          y: PS.mm(o.y + run.row * unit),
+          w: PS.mm(run.len * unit),
           h: unit,
           fill: '#111827'
         });
@@ -62,5 +83,5 @@ window.PS = window.PS || {};
     return out;
   }
 
-  PS.marker = { matrix: matrix, runs: runs, ops: ops };
+  PS.marker = { PATTERN: PATTERN, matrix: matrix, runs: runs, ops: ops };
 })(window.PS);

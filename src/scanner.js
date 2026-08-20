@@ -1,38 +1,33 @@
 /* PageScan — reading a photographed or flatbed-scanned sheet back in.
  *
- * jsQR finds one symbol per call and a page photo can be 12 megapixels, so
- * detection is staged:
- *   1. sweep four overlapping quadrants, downscaled to a size where a 15mm
- *      marker still spans about 4px per module;
- *   2. once two markers are known the page's pose is roughly determined, so
- *      predict where the missing ones must be and read those small windows at
- *      native resolution — far cheaper and surer than blind tiling;
- *   3. if corners are still missing, repeat at the next sweep resolution.
- * Every hit is finally re-read from a tight native crop, so the fiducials
- * carry full-resolution precision no matter which pass found them, and the
- * whole search runs under a time budget. */
+ * Detection is a straight search for the four registration patterns:
+ *   1. shrink the frame to a working size where a 2.2mm module is still
+ *      several pixels across, and binarise it with the same Sauvola threshold
+ *      the cleaning stage uses;
+ *   2. hunt every row and column for the 1:1:3:1:1 (finder) and 1:1:1:1:1
+ *      (alignment) run patterns, and keep the spots where rows and columns
+ *      agree — see finder.js;
+ *   3. pick the four that best describe a sheet, name them from the alignment
+ *      square (which sits at BR and nowhere else), and re-read each one from a
+ *      tight native-resolution crop so the fiducials carry full precision.
+ * If the first working size finds fewer than four, try the others.
+ *
+ * The markers carry no data, so the paper size cannot be read off the page —
+ * A4, A5 and A3 are the same shape. It is passed in. Orientation, and which
+ * corner is which, are recovered from the geometry. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  /* Successive sweep resolutions, as a long-side pixel cap. 1400 keeps a
-   * 15mm marker near 4px per module on A4; 2000 helps large paper where the
-   * marker is a smaller fraction of the sheet; 900 trades resolution for the
-   * noise suppression that area-averaging down gives you. */
-  var SWEEP_SCALES = [1400, 2000, 900];
-  var QUAD_OVERLAP = 0.62;   // each quadrant covers 62% of each axis
+  /* Working resolutions, as a long-side pixel cap. 1100 puts a 2.2mm module
+   * near 4px on A4; 1600 helps large paper, where a marker is a smaller
+   * fraction of the sheet; 800 trades resolution for the noise suppression
+   * that area-averaging down gives you. */
+  var WORK_SCALES = [1100, 1600, 800];
   var EDGE_TRIM_MM = 1.2;    // photographed sheets carry a dark rim; drop it
-  /* jsQR is quick when it finds a symbol and slow when it does not, roughly
-   * linear in pixels. Without a ceiling, a photo containing no markers at all
-   * could grind for a minute; this bounds that to something explainable. */
-  var BUDGET_MS = 9000;
-
-  /* The fiducial is whichever corner of the symbol faces away from the page
-   * centre — the one point per marker whose page-mm position we know. */
-  var OUTWARD = {
-    TL: 'topLeftCorner', TR: 'topRightCorner',
-    BR: 'bottomRightCorner', BL: 'bottomLeftCorner'
-  };
+  var BUDGET_MS = 6000;
+  var MAX_CANDIDATES = 8;    // enough for four markers and a few false alarms
+  var DEFAULT_PAPER = 'A4';
 
   function cropRGBA(img, x, y, w, h) {
     x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
@@ -48,9 +43,9 @@ window.PS = window.PS || {};
   }
 
   /* Fractional box-filter resample. Averaging down is not just about speed:
-   * it suppresses sensor noise, which is often what stands between jsQR and
-   * a readable symbol in a dim photograph. Pure JS, so the pipeline behaves
-   * identically in tests and in the browser. */
+   * it suppresses sensor noise, which is often what stands between a marker
+   * and a clean threshold in a dim photograph. Pure JS, so the pipeline
+   * behaves identically in tests and in the browser. */
   function resampleRGBA(img, scale) {
     if (scale >= 0.999) return img;
     var w = Math.max(1, Math.round(img.width * scale));
@@ -76,193 +71,208 @@ window.PS = window.PS || {};
     return { data: out, width: w, height: h, ox: img.ox, oy: img.oy };
   }
 
-  function symbolBox(loc) {
-    var pts = [loc.topLeftCorner, loc.topRightCorner, loc.bottomRightCorner, loc.bottomLeftCorner];
-    var xs = pts.map(function (p) { return p.x; }), ys = pts.map(function (p) { return p.y; });
-    var minX = Math.min.apply(null, xs), minY = Math.min.apply(null, ys);
-    return { x: minX, y: minY, w: Math.max.apply(null, xs) - minX, h: Math.max.apply(null, ys) - minY };
+  /* Ink mask for pattern hunting. A local threshold is what lets the same
+   * frame hold a bright window and a shadowed corner. */
+  function inkMask(img, radius) {
+    var gray = PS.geom.toGray(img);
+    return PS.geom.sauvola(gray, img.width, img.height, radius, 0.2);
   }
 
-  /* Read one rectangle of the source image, resampling down if it is larger
-   * than jsQR needs. Coordinates come back in source-image space.
-   * Markers are always printed dark on white, so inversion is off by default;
-   * it is only worth the doubled cost on the small windows. */
-  function scanRegion(img, rect, maxDim, tryInverted) {
-    var region = cropRGBA(img, rect.x, rect.y, rect.w, rect.h);
-    if (!region) return null;
-    var scale = Math.min(1, maxDim / Math.max(region.width, region.height));
-    var work = resampleRGBA(region, scale);
-    var res;
-    try {
-      res = jsQR(work.data, work.width, work.height, {
-        inversionAttempts: tryInverted ? 'attemptBoth' : 'dontInvert'
-      });
-    } catch (e) { return null; }
-    if (!res) return null;
-    var decoded = PS.decodePayload(res.data);
-    if (!decoded) return null;
-    var back = region.width / work.width;
-    return { decoded: decoded, location: res.location, ox: region.ox, oy: region.oy, scale: back };
-  }
-
-  function record(hits, hit) {
-    var box = symbolBox(hit.location);
-    var size = Math.max(box.w, box.h) * hit.scale;
-    var corner = hit.decoded.corner;
-    if (hits[corner] && hits[corner].size >= size) return;
-    hits[corner] = {
-      corner: corner,
-      paper: hit.decoded.paper,
-      orientation: hit.decoded.orientation,
-      point: {
-        x: hit.ox + hit.location[OUTWARD[corner]].x * hit.scale,
-        y: hit.oy + hit.location[OUTWARD[corner]].y * hit.scale
-      },
-      box: {
-        x: hit.ox + box.x * hit.scale, y: hit.oy + box.y * hit.scale,
-        w: box.w * hit.scale, h: box.h * hit.scale
-      },
-      size: size
-    };
-  }
-
-  function quadrants(w, h) {
-    var qw = w * QUAD_OVERLAP, qh = h * QUAD_OVERLAP;
-    return [
-      { x: 0, y: 0, w: qw, h: qh },
-      { x: w - qw, y: 0, w: qw, h: qh },
-      { x: w - qw, y: h - qh, w: qw, h: qh },
-      { x: 0, y: h - qh, w: qw, h: qh }
-    ];
-  }
-
-  function sweep(img, regions, maxDim, hits, deadline) {
-    for (var i = 0; i < regions.length; i++) {
-      if (Object.keys(hits).length === 4) return;
-      if (Date.now() > deadline) return;
-      var hit = scanRegion(img, regions[i], maxDim, false);
-      if (hit) record(hits, hit);
-    }
-  }
-
-  /* Rough page-mm -> image-px pose from the markers found so far.
-   * Three points give an exact affine; two give a similarity, which is enough
-   * to aim a search window even when the shot is angled. */
-  function pose(pagePts, imgPts) {
-    if (pagePts.length >= 3) {
-      var A = PS.geom.affine(pagePts.slice(0, 3), imgPts.slice(0, 3));
-      if (!A) return null;
+  /* Everything the finder saw in one frame, in source-image coordinates. */
+  function candidates(img, longSide) {
+    var scale = Math.min(1, longSide / Math.max(img.width, img.height));
+    var work = resampleRGBA(img, scale);
+    var back = img.width / work.width;
+    var radius = Math.max(8, Math.round(Math.max(work.width, work.height) / 40));
+    var found = PS.finder.centres(inkMask(work, radius), work.width, work.height);
+    return found.slice(0, MAX_CANDIDATES).map(function (c) {
       return {
-        map: function (p) { return { x: A[0] * p.x + A[1] * p.y + A[2], y: A[3] * p.x + A[4] * p.y + A[5] }; },
-        pxPerMm: Math.sqrt(Math.abs(A[0] * A[4] - A[1] * A[3])) || 1
+        x: (img.ox || 0) + c.x * back, y: (img.oy || 0) + c.y * back,
+        module: c.module * back, kind: c.kind, support: c.support
       };
+    });
+  }
+
+  function cross(ax, ay, bx, by) { return ax * by - ay * bx; }
+
+  /* Name the markers. The alignment square is printed at one corner only, so
+   * finding it fixes the sheet's rotation outright; the rest follow from the
+   * winding order, which a photograph preserves because paper cannot be
+   * mirrored. Without it, the top-left finder is the one whose two neighbours
+   * subtend a right angle. */
+  function assign(points) {
+    var aligns = points.filter(function (p) { return p.kind === 'align'; });
+    var finders = points.filter(function (p) { return p.kind === 'finder'; });
+    var hits = {}, i;
+
+    function vec(from, to) { return { x: to.x - from.x, y: to.y - from.y }; }
+
+    if (aligns.length && finders.length >= 2) {
+      var br = aligns[0];
+      var us = finders.slice(0, 3).map(function (f) { return { p: f, u: vec(br, f) }; });
+      hits.BR = br;
+
+      if (us.length === 3) {
+        us.sort(function (a, b) { return Math.hypot(b.u.x, b.u.y) - Math.hypot(a.u.x, a.u.y); });
+        hits.TL = us[0].p;
+        var s = cross(us[1].u.x, us[1].u.y, us[2].u.x, us[2].u.y);
+        hits.TR = s < 0 ? us[1].p : us[2].p;
+        hits.BL = s < 0 ? us[2].p : us[1].p;
+        return hits;
+      }
+
+      var a = us[0], b = us[1];
+      var la = Math.hypot(a.u.x, a.u.y), lb = Math.hypot(b.u.x, b.u.y);
+      if (!la || !lb) return null;
+      var cosang = (a.u.x * b.u.x + a.u.y * b.u.y) / (la * lb);
+      if (Math.abs(cosang) < 0.45) {          // both are side corners
+        var t = cross(a.u.x, a.u.y, b.u.x, b.u.y);
+        hits.TR = t < 0 ? a.p : b.p;
+        hits.BL = t < 0 ? b.p : a.p;
+      } else {                                 // the long one is the diagonal
+        var tl = la >= lb ? a : b, other = la >= lb ? b : a;
+        hits.TL = tl.p;
+        hits[cross(tl.u.x, tl.u.y, other.u.x, other.u.y) > 0 ? 'TR' : 'BL'] = other.p;
+      }
+      return hits;
     }
-    if (pagePts.length === 2) {
-      var pd = { x: pagePts[1].x - pagePts[0].x, y: pagePts[1].y - pagePts[0].y };
-      var id = { x: imgPts[1].x - imgPts[0].x, y: imgPts[1].y - imgPts[0].y };
-      var den = pd.x * pd.x + pd.y * pd.y;
-      if (den < 1e-6) return null;
-      /* Complex division: the rotation+scale taking one page vector to the other. */
-      var zr = (id.x * pd.x + id.y * pd.y) / den;
-      var zi = (id.y * pd.x - id.x * pd.y) / den;
-      return {
-        map: function (p) {
-          var dx = p.x - pagePts[0].x, dy = p.y - pagePts[0].y;
-          return { x: imgPts[0].x + zr * dx - zi * dy, y: imgPts[0].y + zi * dx + zr * dy };
-        },
-        pxPerMm: Math.hypot(zr, zi) || 1
-      };
+
+    if (finders.length >= 3) {
+      var f = finders.slice(0, 3), bestI = -1, bestErr = Infinity;
+      for (i = 0; i < 3; i++) {
+        var u = vec(f[i], f[(i + 1) % 3]), v = vec(f[i], f[(i + 2) % 3]);
+        var lu = Math.hypot(u.x, u.y), lv = Math.hypot(v.x, v.y);
+        if (!lu || !lv) return null;
+        var err = Math.abs((u.x * v.x + u.y * v.y) / (lu * lv));   // |cos|, 0 at 90°
+        if (err < bestErr) { bestErr = err; bestI = i; }
+      }
+      var tlp = f[bestI], p = f[(bestI + 1) % 3], q = f[(bestI + 2) % 3];
+      hits.TL = tlp;
+      var w = cross(p.x - tlp.x, p.y - tlp.y, q.x - tlp.x, q.y - tlp.y);
+      hits.TR = w > 0 ? p : q;
+      hits.BL = w > 0 ? q : p;
+      return hits;
     }
+
     return null;
   }
 
-  function agreedSet(hits) {
-    var found = PS.CORNERS.filter(function (c) { return hits[c]; });
-    if (!found.length) return { found: [], paper: null, orientation: null };
-    var tally = Object.create(null), best = null;
-    found.forEach(function (c) {
-      var key = hits[c].paper + hits[c].orientation;
-      tally[key] = (tally[key] || 0) + 1;
-      if (!best || tally[key] > tally[best]) best = key;
-    });
-    var paper = best.slice(0, 2), orientation = best.slice(2);
-    return {
-      paper: paper, orientation: orientation,
-      found: found.filter(function (c) {
-        return hits[c].paper === paper && hits[c].orientation === orientation;
-      })
-    };
+  function quadArea(pts) {
+    var a = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var j = (i + 1) % pts.length;
+      a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    }
+    return Math.abs(a) / 2;
   }
 
-  /* Aim a native-resolution read at each corner we haven't got yet. */
-  function predictMissing(img, hits) {
-    var set = agreedSet(hits);
-    if (set.found.length < 2 || set.found.length === 4) return;
-    var origins = PS.markOrigins(set.paper, set.orientation);
-    var fid = PS.fiducials(set.paper, set.orientation);
-    var half = PS.MARK.size / 2;
+  /* Score a naming: the four markers sit at the corners of the sheet, so the
+   * right answer is the one that encloses the most page — weighted down when
+   * the markers disagree about how big a module is, which is what a false
+   * alarm somewhere off the sheet looks like. */
+  function score(hits) {
+    var order = PS.CORNERS.filter(function (c) { return hits[c]; });
+    if (order.length < 3) return 0;
+    var pts = order.map(function (c) { return hits[c]; });
+    var lo = Infinity, hi = 0;
+    pts.forEach(function (p) { lo = Math.min(lo, p.module); hi = Math.max(hi, p.module); });
+    if (!hi) return 0;
+    return quadArea(pts) * (lo / hi) * (order.length === 4 ? 1.6 : 1);
+  }
 
-    var p = pose(
-      set.found.map(function (c) { return fid[c]; }),
-      set.found.map(function (c) { return hits[c].point; })
-    );
-    if (!p) return;
+  /* Choose the best three or four of everything the finder reported. */
+  function choose(cands) {
+    if (cands.length < 3) return cands.length ? { hits: null, points: cands } : null;
 
-    PS.CORNERS.forEach(function (corner) {
-      if (hits[corner]) return;
-      var centre = { x: origins[corner].x + half, y: origins[corner].y + half };
-      var at = p.map(centre);
-      var span = PS.MARK.size * p.pxPerMm * 3.2;
-      var hit = scanRegion(img, { x: at.x - span / 2, y: at.y - span / 2, w: span, h: span },
-                           SWEEP_SCALES[0], true);
-      if (hit && hit.decoded.corner === corner) record(hits, hit);
-    });
+    var best = null, bestScore = 0;
+    var n = Math.min(cands.length, MAX_CANDIDATES);
+    var combos = [];
+    for (var a = 0; a < n; a++) {
+      for (var b = a + 1; b < n; b++) {
+        for (var c = b + 1; c < n; c++) {
+          combos.push([cands[a], cands[b], cands[c]]);
+          for (var d = c + 1; d < n; d++) combos.push([cands[a], cands[b], cands[c], cands[d]]);
+        }
+      }
+    }
+    for (var i = 0; i < combos.length; i++) {
+      var hits = assign(combos[i]);
+      if (!hits) continue;
+      var s = score(hits);
+      if (s > bestScore) { bestScore = s; best = hits; }
+    }
+    return best ? { hits: best } : { hits: null, points: cands.slice(0, 4) };
+  }
+
+  /* Which way up the sheet is: compare a horizontal marker span with a
+   * vertical one. Every three-marker subset offers one of each. */
+  function orientationOf(hits) {
+    function span(a, b) {
+      return hits[a] && hits[b] ? Math.hypot(hits[a].x - hits[b].x, hits[a].y - hits[b].y) : 0;
+    }
+    var across = span('TL', 'TR') || span('BL', 'BR');
+    var down = span('TL', 'BL') || span('TR', 'BR');
+    if (!across || !down) return null;
+    return across > down ? 'L' : 'P';
+  }
+
+  /* Re-read one marker from a tight native crop, where a module is tens of
+   * pixels rather than four, and take the centre from that. */
+  function refine(img, hit, corner) {
+    var pad = hit.module * 12;
+    var region = cropRGBA(img, hit.x - pad, hit.y - pad, pad * 2, pad * 2);
+    if (!region || region.width < 24 || region.height < 24) return;
+    var radius = Math.max(6, Math.round(hit.module * 3));
+    var found = PS.finder.centres(inkMask(region, radius), region.width, region.height);
+    var want = PS.markKind(corner), tol = hit.module * 3;
+    for (var i = 0; i < found.length; i++) {
+      var c = found[i];
+      var x = region.ox + c.x, y = region.oy + c.y;
+      if (c.kind !== want) continue;
+      if (Math.abs(x - hit.x) > tol || Math.abs(y - hit.y) > tol) continue;
+      hit.x = x; hit.y = y; hit.module = c.module; hit.refined = true;
+      return;
+    }
+  }
+
+  function result(paper, orientation, hits, reason) {
+    var found = PS.CORNERS.filter(function (c) { return hits && hits[c]; });
+    if (found.length >= 3 && !orientation) reason = 'collinear';
+    return {
+      ok: found.length >= 3 && !!orientation,
+      reason: found.length >= 3 && orientation ? null : (reason || (found.length ? 'need-three' : 'no-markers')),
+      paper: paper, orientation: orientation,
+      found: found,
+      missing: PS.CORNERS.filter(function (c) { return found.indexOf(c) < 0; }),
+      hits: hits || {},
+      exact: found.length === 4
+    };
   }
 
   function detect(img, opts) {
     opts = opts || {};
-    var hits = Object.create(null);
+    var paper = PS.PAPER[opts.paper] ? opts.paper : DEFAULT_PAPER;
     var deadline = Date.now() + (opts.budgetMs || BUDGET_MS);
-    var regions = quadrants(img.width, img.height);
+    var hits = null, seen = 0;
 
-    /* Try each sweep resolution in turn, letting the predictive pass close
-     * the gap after every one — two markers are usually enough to aim at
-     * the rest, which is far cheaper than sweeping again. */
-    for (var i = 0; i < SWEEP_SCALES.length; i++) {
-      sweep(img, regions, SWEEP_SCALES[i], hits, deadline);
-      predictMissing(img, hits);
-      if (agreedSet(hits).found.length === 4) break;
+    for (var i = 0; i < WORK_SCALES.length; i++) {
+      var cands = candidates(img, WORK_SCALES[i]);
+      seen = Math.max(seen, cands.length);
+      var picked = choose(cands);
+      if (picked && picked.hits) {
+        hits = picked.hits;
+        if (PS.CORNERS.filter(function (c) { return hits[c]; }).length === 4) break;
+      }
       if (Date.now() > deadline) break;
     }
 
-    /* Re-read every hit from a tight native crop for maximum corner precision. */
-    Object.keys(hits).forEach(function (corner) {
-      var hit = hits[corner];
-      var pad = Math.max(hit.box.w, hit.box.h) * 0.45;
-      var refined = scanRegion(img, {
-        x: hit.box.x - pad, y: hit.box.y - pad,
-        w: hit.box.w + pad * 2, h: hit.box.h + pad * 2
-      }, Infinity, true);
-      if (!refined || refined.decoded.corner !== corner || refined.scale !== 1) return;
-      var p = refined.location[OUTWARD[corner]];
-      hit.point = { x: refined.ox + p.x, y: refined.oy + p.y };
-      hit.refined = true;
+    if (!hits) return result(paper, null, null, seen ? 'need-three' : 'no-markers');
+
+    PS.CORNERS.forEach(function (corner) {
+      if (hits[corner]) refine(img, hits[corner], corner);
     });
 
-    var set = agreedSet(hits);
-    if (!set.found.length) {
-      return { ok: false, reason: 'no-markers', found: [], missing: PS.CORNERS.slice(), hits: hits };
-    }
-    return {
-      ok: set.found.length >= 3,
-      reason: set.found.length >= 3 ? null : 'need-three',
-      paper: set.paper,
-      orientation: set.orientation,
-      found: set.found,
-      missing: PS.CORNERS.filter(function (c) { return set.found.indexOf(c) < 0; }),
-      hits: hits,
-      exact: set.found.length === 4
-    };
+    return result(paper, orientationOf(hits), hits);
   }
 
   /* How many source pixels cover one millimetre of paper, averaged over the
@@ -273,7 +283,7 @@ window.PS = window.PS || {};
     var total = 0, count = 0;
     pairs.forEach(function (pair) {
       if (detection.found.indexOf(pair[0]) < 0 || detection.found.indexOf(pair[1]) < 0) return;
-      var a = detection.hits[pair[0]].point, b = detection.hits[pair[1]].point;
+      var a = detection.hits[pair[0]], b = detection.hits[pair[1]];
       var mm = Math.hypot(fid[pair[0]].x - fid[pair[1]].x, fid[pair[0]].y - fid[pair[1]].y);
       if (mm > 1) { total += Math.hypot(a.x - b.x, a.y - b.y) / mm; count++; }
     });
@@ -287,7 +297,7 @@ window.PS = window.PS || {};
     var fid = PS.fiducials(detection.paper, detection.orientation);
     var corners = detection.found;
     var pagePts = corners.map(function (c) { return fid[c]; });
-    var imgPts = corners.map(function (c) { return detection.hits[c].point; });
+    var imgPts = corners.map(function (c) { return detection.hits[c]; });
 
     var H = corners.length >= 4
       ? PS.geom.homography(pagePts.slice(0, 4), imgPts.slice(0, 4))
@@ -347,7 +357,7 @@ window.PS = window.PS || {};
   }
 
   PS.scanner = {
-    detect: detect, rectify: rectify, cropRGBA: cropRGBA,
-    resampleRGBA: resampleRGBA, sourceScale: sourceScale, scanRegion: scanRegion
+    detect: detect, rectify: rectify, cropRGBA: cropRGBA, resampleRGBA: resampleRGBA,
+    sourceScale: sourceScale, candidates: candidates, assign: assign, inkMask: inkMask
   };
 })(window.PS);

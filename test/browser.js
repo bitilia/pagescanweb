@@ -8,7 +8,8 @@ const http = require('http');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const FIXTURES = process.env.PS_FIXTURES;
+const FIXTURES = process.env.PS_FIXTURES || require('./make-fixtures')
+  .build(fs.mkdtempSync(path.join(os.tmpdir(), 'pagescan-photos-')));
 const OUT = process.env.PS_OUT || fs.mkdtempSync(path.join(os.tmpdir(), 'pagescan-ui-'));
 
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
@@ -54,9 +55,11 @@ function check(name, ok, detail) {
   check('generator renders a preview',
     await page.locator('#preview svg').count() === 1);
 
+  /* Three seven-module finders at 15 runs each, plus the five-module
+     alignment square at 9. */
   const markerRects = await page.evaluate(() =>
     window.PS.marker.ops('A4', 'P').length);
-  check('four markers are drawn as vector runs', markerRects > 200, `${markerRects} rects`);
+  check('four markers are drawn as vector runs', markerRects === 54, `${markerRects} rects`);
 
   /* every template must render without throwing */
   for (const t of await page.evaluate(() => window.PS.templates.LIST.map(x => x.id))) {
@@ -90,10 +93,16 @@ function check(name, ok, detail) {
   await page.click('[data-mode="scan"]');
   await page.waitForTimeout(200);
 
-  const photos = ['photo1.png', 'photo2.png', 'photo3.png'].map(f => path.join(FIXTURES, f));
-  await page.setInputFiles('#file-input', photos);
-  await page.waitForFunction(() => window.__psPages === undefined || true);
-  await page.waitForSelector('.pagecard', { timeout: 120000 });
+  /* The markers carry no payload, so the paper size is picked here. The two
+     A4 shots go in together; the A5 one after switching the control, which is
+     also what proves the control is wired up. */
+  const photo = f => path.join(FIXTURES, f);
+  await page.click('[data-scan-paper="A4"]');
+  await page.setInputFiles('#file-input', [photo('photo1.png'), photo('photo2.png')]);
+  await page.waitForFunction(() => document.querySelectorAll('.pagecard').length === 2, { timeout: 180000 });
+
+  await page.click('[data-scan-paper="A5"]');
+  await page.setInputFiles('#file-input', [photo('photo3.png')]);
   await page.waitForFunction(() => document.querySelectorAll('.pagecard').length === 3, { timeout: 180000 });
 
   const cards = await page.$$eval('.pagecard', els => els.map(e => ({
@@ -101,9 +110,10 @@ function check(name, ok, detail) {
     badges: [...e.querySelectorAll('.badge')].map(b => b.textContent)
   })));
   check('all three photos became pages', cards.length === 3);
-  check('page 1 read as A4 portrait', cards[0].badges[0] === 'A4 portrait', cards[0].badges.join(', '));
-  check('page 2 read as A4 landscape', cards[1].badges[0] === 'A4 landscape', cards[1].badges.join(', '));
-  check('page 3 read as A5 portrait', cards[2].badges[0] === 'A5 portrait', cards[2].badges.join(', '));
+  /* Orientation is not told to the scanner — it comes out of the geometry. */
+  check('page 1 squared up as A4 portrait', cards[0].badges[0] === 'A4 portrait', cards[0].badges.join(', '));
+  check('page 2 squared up as A4 landscape', cards[1].badges[0] === 'A4 landscape', cards[1].badges.join(', '));
+  check('page 3 squared up as A5 portrait', cards[2].badges[0] === 'A5 portrait', cards[2].badges.join(', '));
   check('no page fell back to 3 markers',
     !cards.some(c => c.badges.includes('3 markers')));
 

@@ -85,7 +85,11 @@ function expectedRuleRows(spec) {
    rules at normal settings) would only get in the way. */
 function detectedRuleRows(page) {
   const s = page.dpi / MM_PER_IN;
-  const trim = Math.round(6 * s);              // ignore the marker band
+  /* Measure only the span where a rule is actually drawn: rules are clipped
+     out of the marker keep-outs, and a solid finder ring darkens a whole row
+     enough to drown one out. Vertically only the page-edge trim is skipped. */
+  const trim = Math.round((PS.MARK.inset + PS.MARK.finder / 2 + PS.MARK.quiet) * s);
+  const vtrim = Math.round(3 * s);
   const rowMean = new Float64Array(page.height);
   for (let y = 0; y < page.height; y++) {
     let sum = 0;
@@ -96,7 +100,7 @@ function detectedRuleRows(page) {
      shows up as a dip regardless of overall page lighting. */
   const win = Math.round(3 * s);
   const rows = [];
-  for (let y = trim; y < page.height - trim; y++) {
+  for (let y = vtrim; y < page.height - vtrim; y++) {
     let base = 0, n = 0;
     for (let d = -win * 3; d <= win * 3; d += 1) {
       const yy = y + d;
@@ -169,7 +173,10 @@ for (const c of ACCURACY) {
   });
 
   const t0 = Date.now();
-  const det = PS.scanner.detect(img);
+  /* Paper size is told to the scanner — bare registration patterns carry no
+     payload, and A3/A4/A5 are the same shape. Orientation is not: it has to
+     come out of the marker geometry. */
+  const det = PS.scanner.detect(img, { paper: c.paper });
   const tDetect = Date.now() - t0;
 
   const problems = [];
@@ -224,7 +231,7 @@ for (const c of RULED) {
     marks: [], blur: 1, noise: 2, seed: 5
   });
 
-  const det = PS.scanner.detect(img);
+  const det = PS.scanner.detect(img, { paper: c.paper });
   const problems = [];
   let worst = NaN, matched = 0, expected = [];
   if (!det.ok) problems.push(`detect failed (${det.reason})`);
@@ -266,7 +273,7 @@ console.log('-'.repeat(112));
     quad: [[380, 60], [2140, 245], [1878, 2734], [118, 2549]],
     marks, blur: 1, noise: 2, seed: 3, light: false
   });
-  const det = PS.scanner.detect(img);
+  const det = PS.scanner.detect(img, { paper: 'A4' });
   const problems = [];
   let worst = NaN, mode = '-';
   if (!det.ok) problems.push(`detect failed (${det.reason})`);
@@ -291,7 +298,7 @@ console.log('-'.repeat(112));
 /* No markers at all: must fail cleanly rather than throw. */
 {
   const blankImg = { data: new Uint8ClampedArray(400 * 400 * 4).fill(255), width: 400, height: 400 };
-  const det = PS.scanner.detect(blankImg);
+  const det = PS.scanner.detect(blankImg, { paper: 'A4' });
   const ok = det.ok === false && det.reason === 'no-markers';
   if (!ok) failures++;
   console.log(pad('blank frame, no markers', 34) + pad('0/4', 7) + pad('-', 12) + pad('-', 11) +

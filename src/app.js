@@ -44,7 +44,8 @@
 
   /* Tile thumbnails are drawn at tile scale rather than shrinking the real
    * sheet: at 60px wide the actual rules would fall below one pixel. The
-   * four corner squares are the shared motif — every sheet has them. */
+   * corner markers are the shared motif — every sheet has them, three large
+   * and one small, in that arrangement. */
   function tileArt(id) {
     var body = '';
     var line = function (y) { return '<rect x="4" y="' + y + '" width="22" height="0.9" opacity="0.55"/>'; };
@@ -68,9 +69,11 @@
          plus a real gap is what reads as a stave. */
       for (var g = 0; g < 2; g++) for (var l = 0; l < 5; l++) body += line(11 + g * 16 + l * 2.2);
     }
-    /* corner markers */
-    [[3, 3], [24, 3], [3, 34], [24, 34]].forEach(function (p) {
-      body += '<rect x="' + p[0] + '" y="' + p[1] + '" width="3" height="3" rx="0.4" opacity="0.9"/>';
+    /* corner markers: finders at TL, TR and BL, the smaller alignment square
+       at BR — the same asymmetry that tells the scanner which way is up */
+    [[3, 3, 3.4], [23.6, 3, 3.4], [3, 33.6, 3.4], [24.6, 34.6, 2.4]].forEach(function (p) {
+      body += '<rect x="' + p[0] + '" y="' + p[1] + '" width="' + p[2] +
+        '" height="' + p[2] + '" rx="0.3" opacity="0.9"/>';
     });
     return '<svg class="tile__art" viewBox="0 0 30 40" fill="currentColor" aria-hidden="true">' + body + '</svg>';
   }
@@ -141,7 +144,7 @@
       ['Sheet', PS.PAPER[gen.paper].label + ' ' + (gen.orientation === 'L' ? 'landscape' : 'portrait')],
       ['Size', sheet.w + ' × ' + sheet.h + ' mm'],
       [t.spacing ? 'Spacing' : 'Ruling', t.spacing ? gen.spacing + ' mm' : t.label],
-      ['Markers', '4 × ' + PS.MARK.size + ' mm']
+      ['Markers', '3 × ' + PS.MARK.finder + ' mm + 1 × ' + PS.MARK.align + ' mm']
     ];
     $('preview-facts').innerHTML = facts.map(function (f) {
       return '<div><dt>' + f[0] + '</dt><dd>' + f[1] + '</dd></div>';
@@ -229,7 +232,9 @@
    * Scan
    * ===================================================================== */
 
-  var scan = { dpi: 200, strength: 55, hideMarkers: true, pages: [], busy: false };
+  /* Paper size is the one thing the markers cannot tell us: they carry no
+   * payload, and A4, A5 and A3 are all the same shape. */
+  var scan = { paper: 'A4', dpi: 200, strength: 55, hideMarkers: true, pages: [], busy: false };
   var MAX_SOURCE_DIM = 4200;   // beyond this we gain nothing but memory pressure
 
   function log(kind, text) {
@@ -260,11 +265,14 @@
   }
 
   function describeFailure(detection) {
-    if (!detection || detection.reason === 'no-markers') {
+    if (!detection || !detection.found.length) {
       return 'no corner markers found — is the whole sheet in frame, and in focus?';
     }
-    return 'only ' + detection.found.length + ' of 4 markers read (missing ' +
-      detection.missing.join(', ') + ') — at least 3 are needed.';
+    if (detection.reason === 'collinear') {
+      return 'the markers came out in a line, so the page cannot be squared up.';
+    }
+    return 'only ' + detection.found.length + ' of 4 corner markers found — at least 3 ' +
+      'are needed, and a marker cut off by the edge of the frame cannot be read.';
   }
 
   async function addCapture(source, name) {
@@ -275,7 +283,7 @@
       line.textContent = 'Finding corner markers in ' + name + '…';
       await yieldToPaint();
 
-      var detection = PS.scanner.detect(img);
+      var detection = PS.scanner.detect(img, { paper: scan.paper });
       if (!detection.ok) {
         line.className = 'log__line log__line--error';
         line.textContent = name + ': ' + describeFailure(detection);
@@ -395,8 +403,28 @@
     renderPages();
   }
 
+  function buildScanPaperSegments() {
+    $('scan-paper-segments').innerHTML = PS.PAPER_ORDER.map(function (code) {
+      return '<button type="button" class="segment' + (code === scan.paper ? ' is-active' : '') +
+        '" data-scan-paper="' + code + '" aria-pressed="' + (code === scan.paper) + '">' +
+        PS.PAPER[code].label + '</button>';
+    }).join('');
+  }
+
   function initScan() {
     var dragFrom = null;
+
+    buildScanPaperSegments();
+    $('scan-paper-segments').addEventListener('click', function (event) {
+      var button = event.target.closest('[data-scan-paper]');
+      if (!button) return;
+      scan.paper = button.getAttribute('data-scan-paper');
+      Array.prototype.forEach.call(this.children, function (child) {
+        var on = child === button;
+        child.classList.toggle('is-active', on);
+        child.setAttribute('aria-pressed', String(on));
+      });
+    });
 
     $('pagelist').addEventListener('click', function (event) {
       var button = event.target.closest('[data-act]');
@@ -563,7 +591,7 @@
       var canvas = frameToCanvas(video, 1100);
       var ctx = canvas.getContext('2d', { willReadFrequently: true });
       var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var detection = PS.scanner.detect(img, { budgetMs: 700 });
+      var detection = PS.scanner.detect(img, { paper: scan.paper, budgetMs: 700 });
       setPips(detection.found);
 
       if (detection.found.length === 4) {
