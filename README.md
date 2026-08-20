@@ -1,7 +1,7 @@
 # PageScan
 
 Generate printable sheets — lined, squared, graph, dot grid, blank, Cornell, music —
-with an L-shaped registration mark in each corner. Print them, write on them,
+with a QR-style registration marker in each corner. Print them, write on them,
 photograph or scan them, and get back a PDF that is square, cropped and cleaned.
 
 No backend, no build step, no dependencies. HTML, CSS and JavaScript that run
@@ -27,48 +27,55 @@ from a plain file path.
 
 ### The markers
 
-Each sheet carries four thick registration marks hugging the page edges: an
-**L** at three corners and a five-module **alignment square** at the fourth.
-The L arms sit in the margin; the open diagonal is left for writing.
+Each sheet carries the four registration patterns a QR code wears in its own
+corners, printed on their own:
 
 ```
-  ████████              ████████
-  ██                          ██
-  ██                          ██
-  ██                          ██
+  ███████         ███████
+  █     █         █     █          three 7-module finder squares
+  █ ███ █         █ ███ █          at TL, TR and BL
+  █ ███ █         █ ███ █
+  █ ███ █         █ ███ █
+  █     █         █     █
+  ███████         ███████
 
 
-  ██                     █████
-  ██                     █   █
-  ██                     █ █ █
-  ████████               █   █
-                         █████
+  ███████          █████
+  █     █          █   █           and the 5-module alignment
+  █ ███ █          █ █ █           square alone at BR
+  █ ███ █          █   █
+  █ ███ █          █████
+  █     █
+  ███████
 ```
 
-Three L-marks and, at BR, a five-module alignment square. They carry **no
-payload**. That is the whole point: a data-carrying symbol needs fine modules
-that survive poorly in a hand-held photograph. A 2.2mm stroke is coarse enough
-to read through blur and grain, and because each L is only two arms rather than
-a filled square, the keep-out is a thin strip along each edge instead of a
-block into the content.
+They carry **no payload**. That is the whole point: a symbol that encodes
+`PS1:A4:P:TL` needs 25×25 modules, which at a 10.5mm marker is 0.4mm per module —
+fine on a flatbed, marginal in a hand-held photograph. A finder square is seven
+modules across, so the same ink buys **1.5mm modules** — about 1.5× smaller than the earlier
+2.2mm eyes, still coarse enough for a phone photo, and small enough that the
+keep-out no longer eats into the writing area once content is inset past the
+quiet zone.
 
 What the markers no longer say, the geometry has to supply:
 
 | | |
 |---|---|
-| **which corner is which** | The alignment square is printed at one corner only. Find it and the sheet's rotation is fixed; the other three follow from the winding order, which a photograph preserves because paper cannot be mirrored. |
+| **which corner is which** | The alignment square is printed at one corner only. Find it and the sheet's rotation is fixed; the other three follow from the winding order, which a photograph preserves because paper cannot be mirrored. This is the same trick a QR code plays with its three eyes. |
 | **orientation** | Compare a horizontal marker span with a vertical one. Any three of the four give one of each. |
 | **paper size** | Cannot be recovered. A3, A4 and A5 are the same shape, and nothing in a photograph gives absolute scale. **You tell the scan view which paper you printed on**; it defaults to A4. |
 
 ### The fiducial
 
-The one point per L whose position is known exactly is its **joint centre** —
-where the two arm midlines meet. It is recovered by averaging edge samples
-along both arms, which puts it well inside a pixel. The alignment square's
-fiducial is its own centre, averaged over every line that crossed its core.
+The one point per marker whose position is known exactly is its **centre**. It is
+recovered by averaging every scan line that crossed the pattern — thirty-odd in
+each axis — which puts it well inside a pixel, and unlike a corner it does not
+drift when the symbol blurs.
 
-Every mark sits so the four fiducials form a rectangle inset 6.1mm on all sides,
-whatever the paper size.
+Every finder square's outer edge sits 6mm from the page edge, so the four centres
+form a rectangle inset 11.25mm on all sides, whatever the paper size. Template
+rulings start at 19.5mm — past finder plus quiet zone — so the top squares never
+overlap content.
 
 Four known points and four measured points give a **homography**: the full
 projective map from page millimetres to photo pixels. That is what lets a photo
@@ -89,21 +96,23 @@ the millimetre geometry the whole system depends on. A PDF with an exact
 
 One abstract draw-op list feeds both the on-screen SVG preview and the PDF
 content stream, so the preview cannot drift from what you get. Rules are clipped
-out of a keep-out box around each arm, which keeps its quiet zone clear without
-blanking the open corner.
+out of a keep-out box around each marker, which keeps its quiet zone clear.
+A whole sheet's markers come to 54 rectangles.
 
 > Print at **100% / actual size**. If your print dialogue offers "fit to page",
 > turn it off.
 
 ### Scanning
 
-1. **Detect.** Shrink the frame until a 2.2mm stroke is still a few pixels
-   across, threshold it locally, then walk the outer band looking for L-crooks
-   (two long arms, short edge-through-stroke runs) and for the alignment
-   square's **1:1:1:1:1** cross-section. Hits that cluster on the same spot are
-   refined — L joints via arm midlines, the alignment square via its centre —
-   and the four that best describe a sheet are re-read from tight
-   full-resolution crops. No external decoder is involved.
+1. **Detect.** Shrink the frame until a 1.5mm module is still a few pixels
+   across, threshold it locally, then walk every row and every column looking
+   for five consecutive runs of alternating colour in the ratio **1:1:3:1:1**
+   (a finder, seen through its core) or **1:1:1:1:1** (an alignment square).
+   One line proves nothing — a stave of music or a row of grid dots can hit
+   those run lengths by accident — so a spot only counts if rows *and* columns
+   agree on it, which anything linear fails by construction. The four that best
+   describe a sheet are then re-read from tight full-resolution crops.
+   No QR decoder is involved, and none is needed: `src/finder.js` is 135 lines.
 2. **Rectify.** Warp from photo pixels onto a page-millimetre lattice. Output
    resolution is capped at what the source actually resolved — upsampling past
    that only inflates the file.
@@ -148,21 +157,21 @@ ink lands after a full detect-and-rectify cycle.
 | capture | markers | worst ink error |
 |---|---|---|
 | A4 portrait, flat | 4/4 | 0.12 mm |
-| A4 portrait, moderate angle | 4/4 | 0.08 mm |
-| A4 portrait, steep angle | 4/4 | 0.36 mm |
-| A4 portrait, upside down | 4/4 | 0.21 mm |
+| A4 portrait, moderate angle | 4/4 | 0.12 mm |
+| A4 portrait, steep angle | 4/4 | 0.14 mm |
+| A4 portrait, upside down | 4/4 | 0.05 mm |
 | A4 landscape | 4/4 | 0.13 mm |
-| A5 portrait / landscape | 4/4 | 0.11 mm |
-| Letter portrait | 4/4 | 0.08 mm |
-| Legal portrait | 4/4 | 0.07 mm |
-| A3 landscape | 4/4 | 0.27 mm |
-| A4, dim and grainy | 4/4 | 0.11 mm |
-| A4, small capture | 4/4 | 0.11 mm |
-| A4 flatbed, one corner clipped | 3/4 (affine) | 0.45 mm |
+| A5 portrait / landscape | 4/4 | 0.13 mm |
+| Letter portrait | 4/4 | 0.12 mm |
+| Legal portrait | 4/4 | 0.13 mm |
+| A3 landscape | 4/4 | 0.17 mm |
+| A4, dim and grainy | 4/4 | 0.14 mm |
+| A4, small capture | 4/4 | 0.18 mm |
+| A4 flatbed, one corner clipped | 3/4 (affine) | 0.14 mm |
 
-Printed rules return to their stated positions within 0.20mm, and markers in a
+Printed rules return to their stated positions within 0.03mm, and markers in a
 generated PDF sit within 0.12mm of spec when re-read from a 300dpi render.
-Detection takes about 80–160ms on a 2000×2700 frame.
+Detection takes about 80–200ms on a 2000×2700 frame.
 
 ### Where it stops working
 
@@ -173,10 +182,10 @@ Measured on a 2000×2700 capture of A4 (a modest phone photo):
   well past the point where the sheet stops looking like paper.
 - The whole sheet must be in frame. A marker cut off by the frame edge cannot be
   read, and fewer than three leaves nothing to rectify from.
-- A mark wants roughly **20 pixels along each arm**, so on A4 all four markers
-  survive down to a capture of about **420 pixels on the long side**; three
-  survive to about 300 (the alignment square, being smaller, goes first).
-  Larger paper needs proportionally more.
+- A finder square wants roughly **20 pixels across**, so on A4 all four markers
+  survive down to a capture of about **620 pixels on the long side**; three
+  survive to about 440 (the alignment square, being smaller, goes first). Larger
+  paper needs proportionally more.
 - Paper size is not in the markers. Scanning an A5 sheet with the control set to
   A4 gives a correctly squared page at the wrong physical size.
 
@@ -189,12 +198,12 @@ index.html          markup
 styles.css          flat design system
 src/core.js         paper sizes and marker geometry — shared by both halves
 src/templates.js    page rulings as draw ops
-src/marker.js       L marks and BR alignment square as vector rects
+src/marker.js       finder/alignment patterns, merged into vector runs
 src/render.js       draw ops -> SVG preview / PDF content
 src/generator.js    sheet composition and export
 src/pdf.js          minimal PDF 1.4 writer
 src/geom.js         homography, perspective warp, flat-field, tone map, despeckle
-src/finder.js       L-crook and alignment-square search
+src/finder.js       the 1:1:3:1:1 pattern search
 src/scanner.js      marker detection and rectification
 src/pages.js        capture store, thumbnails, scanned-document PDF
 src/icons.js        inline Lucide glyphs
@@ -203,7 +212,7 @@ vendor/             Outfit — self-hosted
 test/               round-trip geometry suite and a Chromium end-to-end suite
 ```
 
-`src/core.js` is the single source of truth for paper sizes, stroke width and
+`src/core.js` is the single source of truth for paper sizes, module size and
 marker placement. The printed sheet and the scanner both read from it, so the
 two halves cannot drift apart.
 

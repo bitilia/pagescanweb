@@ -2,9 +2,9 @@
  * Each template emits an abstract draw-op list in mm (origin top-left, y
  * down). The same list feeds the SVG preview and the PDF exporter, so what
  * you see is literally what gets printed. Rules are clipped out of the
- * corner keep-out boxes so nothing ever intrudes on a marker's quiet zone.
- * Keep-outs are one rectangle per arm, so the open diagonal of each L stays
- * free for rulings. */
+ * corner keep-out boxes so nothing ever intrudes on a marker's quiet zone,
+ * and the content inset itself starts past the top markers so rulings never
+ * run under them. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
@@ -22,7 +22,9 @@ window.PS = window.PS || {};
   };
   var INK_ORDER = ['slate', 'blue', 'emerald', 'amber'];
 
-  var MARGIN = 12;      // content inset, mm
+  /* Content inset tracks the marker keep-out so a change to module size
+   * cannot put rulings back under the top finders. */
+  function contentInset() { return PS.MARK.content; }
   var CAPTION_PAD = 4;  // baseline offset for the human-readable caption
 
   /* ---- 1-D subtraction, used to clip rules around the markers ---------- */
@@ -88,18 +90,18 @@ window.PS = window.PS || {};
 
     lined: function (ops, ctx) {
       var s = ctx.sheet, ink = ctx.ink, kos = ctx.kos, gap = ctx.spacing;
-      var x0 = MARGIN, x1 = s.w - MARGIN;
-      var ys = centredTicks(MARGIN, s.h - MARGIN, gap);
+      var x0 = contentInset(), x1 = s.w - contentInset();
+      var ys = centredTicks(contentInset(), s.h - contentInset(), gap);
       if (ctx.marginRule) {
-        vRule(ops, MARGIN + 20, 0.4, MARGIN, s.h - MARGIN, ink.accent, kos);
+        vRule(ops, contentInset() + 20, 0.4, contentInset(), s.h - contentInset(), ink.accent, kos);
       }
       for (var i = 0; i < ys.length; i++) hRule(ops, ys[i], 0.25, x0, x1, ink.major, kos);
     },
 
     squared: function (ops, ctx) {
       var s = ctx.sheet, ink = ctx.ink, kos = ctx.kos, gap = ctx.spacing;
-      var xs = centredTicks(MARGIN, s.w - MARGIN, gap);
-      var ys = centredTicks(MARGIN, s.h - MARGIN, gap);
+      var xs = centredTicks(contentInset(), s.w - contentInset(), gap);
+      var ys = centredTicks(contentInset(), s.h - contentInset(), gap);
       var i;
       for (i = 0; i < ys.length; i++) hRule(ops, ys[i], 0.2, xs[0], xs[xs.length - 1], ink.major, kos);
       for (i = 0; i < xs.length; i++) vRule(ops, xs[i], 0.2, ys[0], ys[ys.length - 1], ink.major, kos);
@@ -108,8 +110,8 @@ window.PS = window.PS || {};
     graph: function (ops, ctx) {
       var s = ctx.sheet, ink = ctx.ink, kos = ctx.kos;
       var minor = ctx.spacing, every = 5;
-      var xs = centredTicks(MARGIN, s.w - MARGIN, minor);
-      var ys = centredTicks(MARGIN, s.h - MARGIN, minor);
+      var xs = centredTicks(contentInset(), s.w - contentInset(), minor);
+      var ys = centredTicks(contentInset(), s.h - contentInset(), minor);
       var xa = xs[0], xb = xs[xs.length - 1], ya = ys[0], yb = ys[ys.length - 1];
       var i;
       for (i = 0; i < ys.length; i++) if (i % every) hRule(ops, ys[i], 0.13, xa, xb, ink.minor, kos);
@@ -120,8 +122,8 @@ window.PS = window.PS || {};
 
     dotgrid: function (ops, ctx) {
       var s = ctx.sheet, ink = ctx.ink, kos = ctx.kos, gap = ctx.spacing;
-      var xs = centredTicks(MARGIN, s.w - MARGIN, gap);
-      var ys = centredTicks(MARGIN, s.h - MARGIN, gap);
+      var xs = centredTicks(contentInset(), s.w - contentInset(), gap);
+      var ys = centredTicks(contentInset(), s.h - contentInset(), gap);
       for (var j = 0; j < ys.length; j++) {
         for (var i = 0; i < xs.length; i++) {
           if (inKeepout(kos, xs[i], ys[j])) continue;
@@ -132,9 +134,9 @@ window.PS = window.PS || {};
 
     cornell: function (ops, ctx) {
       var s = ctx.sheet, ink = ctx.ink, kos = ctx.kos, gap = ctx.spacing;
-      var x0 = MARGIN, x1 = s.w - MARGIN;
-      var headerY = MARGIN + Math.max(14, gap * 2);
-      var summaryY = s.h - MARGIN - Math.max(38, gap * 5);
+      var x0 = contentInset(), x1 = s.w - contentInset();
+      var headerY = contentInset() + Math.max(14, gap * 2);
+      var summaryY = s.h - contentInset() - Math.max(38, gap * 5);
       var cueX = x0 + Math.max(38, (x1 - x0) * 0.24);
 
       hRule(ops, headerY, 0.5, x0, x1, ink.accent, kos);
@@ -144,7 +146,7 @@ window.PS = window.PS || {};
       for (var y = headerY + gap; y < summaryY - 0.5; y += gap) {
         hRule(ops, y, 0.2, cueX + 3, x1, ink.major, kos);
       }
-      for (y = summaryY + gap; y < s.h - MARGIN; y += gap) {
+      for (y = summaryY + gap; y < s.h - contentInset(); y += gap) {
         hRule(ops, y, 0.2, x0, x1, ink.major, kos);
       }
       ops.push({ k: 'text', x: x0, y: headerY - 2.6, size: 2.8, fill: ink.accent, text: 'TOPIC / DATE' });
@@ -157,10 +159,10 @@ window.PS = window.PS || {};
       var lineGap = ctx.spacing * 0.3;         // 5 lines per stave
       var staveH = lineGap * 4;
       var block = staveH + ctx.spacing * 1.5;  // stave plus breathing room
-      var x0 = MARGIN, x1 = s.w - MARGIN;
-      var avail = (s.h - MARGIN) - MARGIN;
+      var x0 = contentInset(), x1 = s.w - contentInset();
+      var avail = (s.h - contentInset()) - contentInset();
       var count = Math.max(1, Math.floor(avail / block));
-      var top = MARGIN + (avail - (count * block - (block - staveH))) / 2;
+      var top = contentInset() + (avail - (count * block - (block - staveH))) / 2;
       for (var i = 0; i < count; i++) {
         var y = top + i * block;
         for (var l = 0; l < 5; l++) {
@@ -218,7 +220,8 @@ window.PS = window.PS || {};
   }
 
   PS.templates = {
-    LIST: LIST, INKS: INKS, INK_ORDER: INK_ORDER, MARGIN: MARGIN,
+    LIST: LIST, INKS: INKS, INK_ORDER: INK_ORDER,
+    get MARGIN() { return contentInset(); },
     byId: byId, build: build, caption: captionFor
   };
 })(window.PS);

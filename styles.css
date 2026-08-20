@@ -62,18 +62,18 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 .brand { display: flex; align-items: center; gap: 12px; }
-/* A miniature corner L: the app's whole idea in 26 pixels. */
+/* A miniature QR finder pattern: the app's whole idea in 26 pixels. */
 .brand__mark {
   width: 26px; height: 26px; border-radius: var(--radius-sm);
   background: var(--primary); position: relative; flex: none;
 }
-.brand__mark::before {
-  content: ''; position: absolute; left: 6px; top: 6px;
-  width: 14px; height: 4px; background: #FFFFFF; border-radius: 1px;
-}
 .brand__mark::after {
-  content: ''; position: absolute; left: 6px; top: 6px;
-  width: 4px; height: 14px; background: #FFFFFF; border-radius: 1px;
+  content: ''; position: absolute; inset: 7px;
+  background: #FFFFFF; border-radius: 2px;
+}
+.brand__mark::before {
+  content: ''; position: absolute; inset: 11px;
+  background: var(--primary); border-radius: 1px;
 }
 .brand__word { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
 
