@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PageScan — printable sheets with QR corners</title>
+<meta name="description" content="Generate ruled, squared, graph, dot grid, Cornell and music sheets with QR corner markers. Print them, write on them, scan them back into a PDF.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233B82F6'/%3E%3Crect x='9' y='9' width='14' height='14' rx='3' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/outfit/outfit.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__word">PageScan</span>
+    </div>
+    <nav class="modes" role="tablist" aria-label="Mode">
+      <button class="mode is-active" role="tab" aria-selected="true" aria-controls="view-generate" data-mode="generate">Generate</button>
+      <button class="mode" role="tab" aria-selected="false" aria-controls="view-scan" data-mode="scan">Scan</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================ GENERATE ============================ -->
+<section id="view-generate" class="view" role="tabpanel" aria-label="Generate sheets">
+
+  <div class="band band--primary">
+    <span class="band__shape band__shape--circle" aria-hidden="true"></span>
+    <span class="band__shape band__shape--square" aria-hidden="true"></span>
+    <div class="wrap band__inner">
+      <p class="band__eyebrow">Step one</p>
+      <h1 class="band__title">Make a sheet<br>you can scan back.</h1>
+      <p class="band__lead">Four QR corners tell the scanner the paper size, the orientation and
+        which corner it is looking at — so a photo taken at any angle comes back square.</p>
+    </div>
+  </div>
+
+  <div class="wrap layout">
+
+    <div class="controls">
+
+      <fieldset class="group">
+        <legend class="group__label">Template</legend>
+        <div class="tiles" id="template-tiles"></div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">Paper</legend>
+        <div class="segments" id="paper-segments"></div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">Orientation</legend>
+        <div class="segments segments--two" id="orientation-segments"></div>
+      </fieldset>
+
+      <fieldset class="group" id="spacing-group">
+        <legend class="group__label">
+          Spacing <output class="group__value" id="spacing-value">8mm</output>
+        </legend>
+        <input type="range" id="spacing" class="slider" min="5" max="14" step="0.5" value="8" aria-label="Rule spacing in millimetres">
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">Rule colour</legend>
+        <div class="swatches" id="ink-swatches"></div>
+      </fieldset>
+
+      <fieldset class="group" id="margin-group">
+        <legend class="group__label">Options</legend>
+        <label class="check">
+          <input type="checkbox" id="margin-rule" checked>
+          <span class="check__box" aria-hidden="true"></span>
+          <span>Margin rule</span>
+        </label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">Pages</legend>
+        <div class="stepper">
+          <button type="button" class="stepper__btn" id="pages-minus" aria-label="Fewer pages">−</button>
+          <input type="number" id="pages" class="stepper__input" value="4" min="1" max="200" aria-label="Number of pages">
+          <button type="button" class="stepper__btn" id="pages-plus" aria-label="More pages">+</button>
+        </div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" class="btn btn--primary" id="download-sheets"></button>
+        <button type="button" class="btn btn--outline" id="print-sheets"></button>
+      </div>
+
+      <p class="note">
+        Print at <strong>100% / actual size</strong>. If your print dialogue offers
+        “fit to page”, turn it off — the markers carry the true dimensions.
+      </p>
+
+    </div>
+
+    <div class="stage">
+      <div class="stage__paper" id="preview" aria-live="polite"></div>
+      <dl class="stage__facts" id="preview-facts"></dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================== SCAN ============================== -->
+<section id="view-scan" class="view is-hidden" role="tabpanel" aria-label="Scan sheets">
+
+  <div class="band band--secondary">
+    <span class="band__shape band__shape--circle" aria-hidden="true"></span>
+    <span class="band__shape band__shape--square" aria-hidden="true"></span>
+    <div class="wrap band__inner">
+      <p class="band__eyebrow">Step two</p>
+      <h1 class="band__title">Scan it back<br>into a PDF.</h1>
+      <p class="band__lead">Photograph or scan your written-on sheets. Every page is squared up
+        from its corner markers, cleaned, and stacked into one downloadable PDF.</p>
+    </div>
+  </div>
+
+  <div class="wrap layout layout--scan">
+
+    <div class="controls">
+
+      <fieldset class="group">
+        <legend class="group__label">Source</legend>
+        <div class="segments segments--two" id="source-segments">
+          <button type="button" class="segment is-active" data-source="upload">Files</button>
+          <button type="button" class="segment" data-source="camera">Camera</button>
+        </div>
+      </fieldset>
+
+      <div id="source-upload">
+        <div class="dropzone" id="dropzone" tabindex="0" role="button"
+             aria-label="Choose images, or drop them here">
+          <span class="dropzone__icon" id="dropzone-icon" aria-hidden="true"></span>
+          <span class="dropzone__title">Drop photos or scans</span>
+          <span class="dropzone__hint">or click to choose — JPG, PNG, WebP</span>
+        </div>
+        <input type="file" id="file-input" accept="image/*" multiple hidden>
+      </div>
+
+      <div id="source-camera" class="is-hidden">
+        <div class="camera">
+          <video id="camera-video" playsinline muted></video>
+          <div class="camera__pips" id="camera-pips" aria-hidden="true">
+            <span data-corner="TL"></span><span data-corner="TR"></span>
+            <span data-corner="BL"></span><span data-corner="BR"></span>
+          </div>
+          <p class="camera__status" id="camera-status">Camera off</p>
+        </div>
+        <div class="camera__actions">
+          <button type="button" class="btn btn--primary btn--sm" id="camera-toggle">Start camera</button>
+          <button type="button" class="btn btn--secondary btn--sm" id="camera-shoot" disabled>Capture</button>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="camera-auto" checked>
+          <span class="check__box" aria-hidden="true"></span>
+          <span>Capture automatically when all four corners are found</span>
+        </label>
+      </div>
+
+      <fieldset class="group">
+        <legend class="group__label">
+          Resolution <output class="group__value" id="dpi-value">200 dpi</output>
+        </legend>
+        <input type="range" id="dpi" class="slider" min="120" max="400" step="20" value="200" aria-label="Output resolution">
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">
+          Ink pickup <output class="group__value" id="strength-value">55</output>
+        </legend>
+        <input type="range" id="strength" class="slider" min="10" max="95" step="5" value="55" aria-label="Ink pickup strength">
+        <p class="group__hint">Higher keeps faint pencil and the printed rules. Lower keeps only confident ink.</p>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="group__label">Options</legend>
+        <label class="check">
+          <input type="checkbox" id="hide-markers" checked>
+          <span class="check__box" aria-hidden="true"></span>
+          <span>Erase corner markers from the result</span>
+        </label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" class="btn btn--primary" id="download-scan" disabled></button>
+        <button type="button" class="btn btn--outline" id="clear-pages" disabled></button>
+      </div>
+    </div>
+
+    <div class="results">
+      <div class="results__head">
+        <h2 class="results__title">Captured pages</h2>
+        <p class="results__count" id="page-count">None yet</p>
+      </div>
+      <div class="empty" id="results-empty">
+        <span class="empty__icon" id="empty-icon" aria-hidden="true"></span>
+        <p class="empty__title">Nothing captured yet</p>
+        <p class="empty__text">Add photos or flatbed scans of your printed sheets.
+          Pages appear here in the order you add them — drag to reorder before you export.</p>
+      </div>
+      <ul class="pagelist" id="pagelist"></ul>
+      <div class="log" id="log" role="status" aria-live="polite"></div>
+    </div>
+
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <p class="footer__note">Runs entirely in your browser. No upload, no server, no account.</p>
+    <p class="footer__note footer__note--dim">Camera capture needs <code>https</code> or <code>localhost</code>; file import works from anywhere.</p>
+  </div>
+</footer>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/jsQR.js"></script>
+<script src="src/core.js"></script>
+<script src="src/pdf.js"></script>
+<script src="src/templates.js"></script>
+<script src="src/marker.js"></script>
+<script src="src/render.js"></script>
+<script src="src/generator.js"></script>
+<script src="src/geom.js"></script>
+<script src="src/scanner.js"></script>
+<script src="src/pages.js"></script>
+<script src="src/icons.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
