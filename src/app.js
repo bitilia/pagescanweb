@@ -44,7 +44,8 @@
 
   /* Tile thumbnails are drawn at tile scale rather than shrinking the real
    * sheet: at 60px wide the actual rules would fall below one pixel. The
-   * corner L-marks are the shared motif — every sheet has three L's and a T. */
+   * corner L-marks are the shared motif — every sheet has three L's and an
+   * alignment square. */
   function tileArt(id) {
     var body = '';
     var line = function (y) { return '<rect x="4" y="' + y + '" width="22" height="0.9" opacity="0.55"/>'; };

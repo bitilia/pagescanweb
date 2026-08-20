@@ -4,11 +4,11 @@
  *   1. shrink the frame to a working size where a 2.2mm stroke is still
  *      several pixels across, and binarise it with the same Sauvola threshold
  *      the cleaning stage uses;
- *   2. hunt for L-crooks (and the T at BR) — see finder.js — and keep the
- *      spots with enough agreeing hits;
- *   3. pick the four that best describe a sheet, name them from the T (which
- *      sits at BR and nowhere else), and re-read each one from a tight
- *      native-resolution crop so the fiducials carry full precision.
+ *   2. hunt for L-crooks and the BR alignment square — see finder.js — and
+ *      keep the spots with enough agreeing hits;
+ *   3. pick the four that best describe a sheet, name them from the alignment
+ *      square (which sits at BR and nowhere else), and re-read each one from a
+ *      tight native-resolution crop so the fiducials carry full precision.
  * If the first working size finds fewer than four, try the others.
  *
  * The markers carry no data, so the paper size cannot be read off the page —
@@ -95,11 +95,11 @@ window.PS = window.PS || {};
 
   function cross(ax, ay, bx, by) { return ax * by - ay * bx; }
 
-  /* Name the markers. The T is printed at one corner only, so finding it
-   * fixes the sheet's rotation outright; the rest follow from the winding
-   * order, which a photograph preserves because paper cannot be mirrored.
-   * Without it, the top-left L is the one whose two neighbours subtend a
-   * right angle. */
+  /* Name the markers. The alignment square is printed at one corner only, so
+   * finding it fixes the sheet's rotation outright; the rest follow from the
+   * winding order, which a photograph preserves because paper cannot be
+   * mirrored. Without it, the top-left L is the one whose two neighbours
+   * subtend a right angle. */
   function assign(points) {
     var tees = points.filter(function (p) { return p.kind === 'tee'; });
     var ells = points.filter(function (p) { return p.kind === 'ell'; });

@@ -23,13 +23,14 @@ window.PS = window.PS || {};
    * Each corner carries an L-shaped registration mark hugging the two page
    * edges — thick arms in the margin, open toward the writing area — so the
    * keep-out is two thin strips rather than a filled square. The bottom-right
-   * corner is a T: the same L plus a stem island in the open diagonal. That
-   * odd one out is what tells the scanner which way up the sheet is.
+   * corner is a five-module alignment square. That odd one out is what tells
+   * the scanner which way up the sheet is.
    *
-   * The fiducial is the JOINT CENTRE of each mark (where the two arm midlines
-   * meet). It is recovered by averaging edge samples along both arms, which
-   * puts it well inside a pixel, and the four centres form a rectangle inset
-   * by MARK.inset on every side whatever the paper. */
+   * The fiducial is the JOINT CENTRE of each L (where the two arm midlines
+   * meet) and the centre of the alignment square. Joint centres are recovered
+   * by averaging edge samples along both arms, which puts them well inside a
+   * pixel, and the four fiducials form a rectangle inset by MARK.inset on
+   * every side whatever the paper. */
   var MARK = {
     width: 2.2,      // L-arm stroke
     length: 14,      // L-arm length along each page edge
@@ -72,10 +73,10 @@ window.PS = window.PS || {};
     };
   }
 
-  /* Axis-aligned rectangles covering each arm (and the T stem) plus quiet.
-   * Template rules are clipped out of these so nothing intrudes on a mark;
-   * returning one rect per arm — not one square per corner — leaves the open
-   * diagonal free for rulings and handwriting. */
+  /* Axis-aligned rectangles covering each arm (and the BR align square) plus
+   * quiet. Template rules are clipped out of these so nothing intrudes on a
+   * mark; returning one rect per arm — not one square per corner — leaves the
+   * open diagonal free for rulings and handwriting. */
   function keepouts(paperCode, orientation) {
     var s = sheetSize(paperCode, orientation);
     var e = MARK.edge, w = MARK.width, L = MARK.length, q = MARK.quiet;
