@@ -23,9 +23,8 @@ window.PS = window.PS || {};
    * The markers are the plain registration patterns every QR code carries in
    * its own corners: a seven-module finder square at three corners and the
    * five-module alignment square at the fourth. Nothing is encoded in them —
-   * they are pure position. Modules are 1.5mm (about 1.5× smaller than the
-   * earlier 2.2mm eyes) so the keep-out stays out of the writing area once
-   * content is inset past the quiet zone.
+   * they are pure position, which is why their modules can be 2.2mm across
+   * instead of the 0.6mm a data-carrying symbol needs at this size.
    *
    * The fiducial is each marker's CENTRE. A centre is recovered by averaging
    * dozens of scan lines, so it is far steadier under blur and perspective
@@ -35,22 +34,19 @@ window.PS = window.PS || {};
    * Which corner carries the odd one out is what tells the scanner which way
    * up the sheet is — the same trick a QR code plays with its three eyes. */
   var MARK = {
-    module: 1.5,       // one module, printed (~1.5× smaller than 2.2mm)
+    module: 2.2,       // one module, printed
     finderModules: 7,  // the familiar QR eye: ring, gap, core
     alignModules: 5,   // the smaller alignment square
     edge: 6,           // page edge -> outer edge of a finder square
     quietModules: 2    // silent margin kept clear of rules
   };
   /* Rounded so the millimetres that reach the PDF and the SVG are the exact
-   * decimals quoted here, not 10.500000000000002. */
+   * decimals quoted here, not 15.400000000000002. */
   function mm(v) { return Math.round(v * 1e6) / 1e6; }
-  MARK.finder = mm(MARK.finderModules * MARK.module);  // 10.5mm
-  MARK.align = mm(MARK.alignModules * MARK.module);    // 7.5mm
-  MARK.quiet = mm(MARK.quietModules * MARK.module);    // 3.0mm
-  MARK.inset = mm(MARK.edge + MARK.finder / 2);        // 11.25mm, edge -> centre
-  /* Content must start beyond the finder + quiet zone so top markers never
-   * sit on rulings or handwriting. Same figure on every side. */
-  MARK.content = mm(MARK.edge + MARK.finder + MARK.quiet); // 19.5mm
+  MARK.finder = mm(MARK.finderModules * MARK.module);  // 15.4mm
+  MARK.align = mm(MARK.alignModules * MARK.module);    // 11.0mm
+  MARK.quiet = mm(MARK.quietModules * MARK.module);    // 4.4mm
+  MARK.inset = mm(MARK.edge + MARK.finder / 2);        // 13.7mm, edge -> centre
 
   var CORNERS = ['TL', 'TR', 'BR', 'BL'];
   var ALIGN_CORNER = 'BR';   // the one that differs, so "up" is never in doubt

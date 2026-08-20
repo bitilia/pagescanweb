@@ -135,7 +135,7 @@ function detectedRuleRows(page) {
 
 const ACCURACY = [
   /* Frame sizes and source DPI are chosen to mimic what a phone or flatbed
-     actually produces: a 10.5mm finder needs roughly 4px per module to read. */
+     actually produces: a 15mm marker needs roughly 4px per module to read. */
   { name: 'A4 portrait, flat',           paper: 'A4', orientation: 'P', dpi: 260, frame: [2000, 2700], inset: 80,  skew: FLAT, blur: 0, noise: 1.5 },
   { name: 'A4 portrait, moderate angle', paper: 'A4', orientation: 'P', dpi: 260, frame: [2000, 2700], inset: 95,  skew: { tl: [55, 34], tr: [-95, 14], br: [20, -75], bl: [-40, -20] }, blur: 1, noise: 3 },
   { name: 'A4 portrait, steep angle',    paper: 'A4', orientation: 'P', dpi: 260, frame: [2100, 2800], inset: 150, skew: { tl: [125, 95], tr: [-165, 40], br: [70, -150], bl: [-95, -55] }, blur: 2, noise: 6 },
