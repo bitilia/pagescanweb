@@ -18,13 +18,18 @@ def render(pdf_path, dpi):
     return img.astype(np.float32).copy()
 
 def stamp(img, marks, dpi):
-    """Draw filled discs at page-mm positions; these stand in for pen strokes."""
+    """Draw filled discs at page-mm positions; these stand in for pen strokes.
+
+    A fourth element sets the grey level, so a mark can be pencil rather than
+    ink; it defaults to near-black."""
     ppm = dpi / MM_PER_IN
     h, w = img.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
-    for mx, my, r_mm in marks:
+    for mark in marks:
+        mx, my, r_mm = mark[0], mark[1], mark[2]
+        level = mark[3] if len(mark) > 3 else 20.0
         cx, cy, r = mx * ppm, my * ppm, r_mm * ppm
-        img[(xx - cx) ** 2 + (yy - cy) ** 2 <= r * r] = 20.0
+        img[(xx - cx) ** 2 + (yy - cy) ** 2 <= r * r] = float(level)
     return img
 
 def homography(src, dst):

@@ -161,8 +161,13 @@
             <span data-corner="TL"></span><span data-corner="TR"></span>
             <span data-corner="BL"></span><span data-corner="BR"></span>
           </div>
+          <div class="camera__confirm" id="camera-confirm" aria-hidden="true">
+            <span class="camera__confirm-badge" id="camera-confirm-badge"></span>
+            <span class="camera__confirm-text" id="camera-confirm-text"></span>
+          </div>
           <p class="camera__status" id="camera-status">Camera off</p>
         </div>
+        <p class="camera__hint" id="camera-hint" role="status" aria-live="polite"></p>
         <div class="camera__actions">
           <button type="button" class="btn btn--primary btn--sm" id="camera-toggle">Start camera</button>
           <button type="button" class="btn btn--secondary btn--sm" id="camera-shoot" disabled>Capture</button>
@@ -186,7 +191,9 @@
           Ink pickup <output class="group__value" id="strength-value">55</output>
         </legend>
         <input type="range" id="strength" class="slider" min="10" max="95" step="5" value="55" aria-label="Ink pickup strength">
-        <p class="group__hint">Higher keeps faint pencil and the printed rules. Lower keeps only confident ink.</p>
+        <p class="group__hint">Sets where paper ends and ink begins. Anything close to white
+          becomes clean white paper; everything below it is kept as the grey it actually is,
+          down to black. Higher brings in faint pencil and the printed rules.</p>
       </fieldset>
 
       <fieldset class="group">

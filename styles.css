@@ -325,6 +325,50 @@ button, input, select { font: inherit; color: inherit; }
 }
 .camera__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 14px; }
 
+/* The capture confirmation. An auto-capture happens without the user doing
+   anything, so it has to announce itself loudly enough to be read from arm's
+   length: the whole frame floods with colour, a tick lands in the middle, and
+   it stays up for the whole cooldown rather than blinking past. */
+.camera__confirm {
+  position: absolute; inset: 0; display: flex; gap: 14px;
+  flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(16, 185, 129, 0.92); color: #FFFFFF;
+  opacity: 0; visibility: hidden; transition: opacity var(--step), visibility var(--step);
+}
+.camera__confirm.is-bad { background: rgba(239, 68, 68, 0.92); }
+.camera__confirm.is-on { opacity: 1; visibility: visible; }
+.camera__confirm-badge {
+  width: 92px; height: 92px; border-radius: 50%; background: #FFFFFF;
+  display: flex; align-items: center; justify-content: center;
+  transform: scale(0.4);
+}
+.camera__confirm.is-on .camera__confirm-badge { animation: pop 420ms cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+.camera__confirm-badge svg { width: 52px; height: 52px; stroke-width: 3.5; }
+.camera__confirm.is-ok .camera__confirm-badge { color: var(--secondary-dark); }
+.camera__confirm.is-bad .camera__confirm-badge { color: #DC2626; }
+.camera__confirm-text {
+  font-size: 19px; font-weight: 800; letter-spacing: -0.01em;
+  text-align: center; padding: 0 24px; max-width: 22ch;
+}
+@keyframes pop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* The countdown line under the frame: the camera is deliberately not looking
+   for a sheet while this is running, and saying so is the point. */
+.camera__hint {
+  margin: 10px 0 0; min-height: 22px; font-size: 13px; font-weight: 600;
+  color: var(--gray-500); text-align: center;
+}
+.camera__hint.is-holding { color: var(--secondary-dark); }
+.camera__hint.is-bad { color: #DC2626; }
+
+@media (prefers-reduced-motion: reduce) {
+  .camera__confirm.is-on .camera__confirm-badge { animation: none; transform: scale(1); }
+}
+
 /* ------------------------------- results ------------------------------- */
 
 .results__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
@@ -342,6 +386,17 @@ button, input, select { font: inherit; color: inherit; }
   display: grid; grid-template-columns: 76px 1fr auto; gap: 18px; align-items: center;
   background: var(--muted); border-radius: var(--radius); padding: 14px 16px;
   transition: background var(--step), transform var(--step);
+}
+/* A card that has just arrived. Two beats of green is long enough to catch
+   out of the corner of your eye and short enough not to nag. */
+.pagecard.is-new { animation: landed 1600ms ease-out 1; }
+@keyframes landed {
+  0% { background: var(--secondary); transform: scale(1.015); }
+  35% { background: var(--secondary); transform: scale(1); }
+  100% { background: var(--muted); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pagecard.is-new { animation: none; background: #D1FAE5; }
 }
 .pagecard:hover { background: var(--border); }
 .pagecard.is-dragging { opacity: 0.45; }

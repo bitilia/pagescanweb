@@ -98,7 +98,19 @@ function check(name, ok, detail) {
      also what proves the control is wired up. */
   const photo = f => path.join(FIXTURES, f);
   await page.click('[data-scan-paper="A4"]');
+
+  /* The capture confirmation must start out of the way. */
+  const confirmHidden = await page.evaluate(() => {
+    const el = document.getElementById('camera-confirm');
+    return !!el && getComputedStyle(el).visibility === 'hidden';
+  });
+  check('capture confirmation starts hidden', confirmHidden);
+
   await page.setInputFiles('#file-input', [photo('photo1.png'), photo('photo2.png')]);
+  /* A page that has just landed marks itself, so a capture is visible on the
+     card and not only in the log. */
+  await page.waitForSelector('.pagecard.is-new', { timeout: 180000 });
+  check('a new page card announces itself', true);
   await page.waitForFunction(() => document.querySelectorAll('.pagecard').length === 2, { timeout: 180000 });
 
   await page.click('[data-scan-paper="A5"]');
@@ -116,6 +128,10 @@ function check(name, ok, detail) {
   check('page 3 squared up as A5 portrait', cards[2].badges[0] === 'A5 portrait', cards[2].badges.join(', '));
   check('no page fell back to 3 markers',
     !cards.some(c => c.badges.includes('3 markers')));
+
+  /* The flash is temporary: the card settles back on its own. */
+  await page.waitForFunction(() => !document.querySelector('.pagecard.is-new'), { timeout: 8000 });
+  check('the new-page flash clears itself', true);
 
   await page.screenshot({ path: path.join(OUT, 'scan.png') });
 

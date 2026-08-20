@@ -156,6 +156,107 @@ window.PS = window.PS || {};
     return mask;
   }
 
+  /* Paper level at every pixel — a flat-field estimate.
+   *
+   * A photograph of a sheet has a lighting gradient across it, so "white" is
+   * a different number in one corner than another. Sauvola solves that for a
+   * yes/no ink decision; keeping grey needs the same thing as an actual
+   * value, so that a pencil line reads as the same grey wherever it sits.
+   *
+   * Per block, take a high quantile rather than the maximum — the maximum is
+   * whatever pixel the sensor noise made brightest. Then dilate across blocks,
+   * so a block buried under a thick stroke borrows paper from its neighbours,
+   * smooth, and interpolate back up. */
+  function background(gray, w, h, block, quantile) {
+    var gw = Math.max(1, Math.ceil(w / block)), gh = Math.max(1, Math.ceil(h / block));
+    var cell = new Float32Array(gw * gh), hist = new Uint32Array(256);
+    var bx, by, x, y, i;
+
+    for (by = 0; by < gh; by++) {
+      for (bx = 0; bx < gw; bx++) {
+        hist.fill(0);
+        var x0 = bx * block, x1 = Math.min(w, x0 + block);
+        var y0 = by * block, y1 = Math.min(h, y0 + block), n = 0;
+        for (y = y0; y < y1; y++) {
+          var row = y * w;
+          for (x = x0; x < x1; x++) { hist[gray[row + x]]++; n++; }
+        }
+        var want = Math.max(1, Math.round(n * quantile)), acc = 0, v = 255;
+        for (i = 0; i < 256; i++) { acc += hist[i]; if (acc >= want) { v = i; break; } }
+        cell[by * gw + bx] = v;
+      }
+    }
+
+    var dil = new Float32Array(gw * gh);
+    for (by = 0; by < gh; by++) {
+      for (bx = 0; bx < gw; bx++) {
+        var m = 0;
+        for (y = by - 1; y <= by + 1; y++) {
+          for (x = bx - 1; x <= bx + 1; x++) {
+            if (y < 0 || x < 0 || y >= gh || x >= gw) continue;
+            if (cell[y * gw + x] > m) m = cell[y * gw + x];
+          }
+        }
+        dil[by * gw + bx] = m;
+      }
+    }
+
+    var sm = new Float32Array(gw * gh);
+    for (by = 0; by < gh; by++) {
+      for (bx = 0; bx < gw; bx++) {
+        var sum = 0, count = 0;
+        for (y = by - 1; y <= by + 1; y++) {
+          for (x = bx - 1; x <= bx + 1; x++) {
+            if (y < 0 || x < 0 || y >= gh || x >= gw) continue;
+            sum += dil[y * gw + x]; count++;
+          }
+        }
+        sm[by * gw + bx] = sum / count;
+      }
+    }
+
+    /* Bilinear back to full resolution; cell values sit at block centres. */
+    var out = new Float32Array(w * h);
+    for (y = 0; y < h; y++) {
+      var fy = y / block - 0.5;
+      var jy = Math.floor(fy), ty = fy - jy;
+      var j0 = jy < 0 ? 0 : jy >= gh - 1 ? gh - 1 : jy;
+      var j1 = j0 + 1 >= gh ? j0 : j0 + 1;
+      if (jy < 0 || jy >= gh - 1) ty = 0;
+      for (x = 0; x < w; x++) {
+        var fx = x / block - 0.5;
+        var jx = Math.floor(fx), tx = fx - jx;
+        var i0 = jx < 0 ? 0 : jx >= gw - 1 ? gw - 1 : jx;
+        var i1 = i0 + 1 >= gw ? i0 : i0 + 1;
+        if (jx < 0 || jx >= gw - 1) tx = 0;
+        var top = sm[j0 * gw + i0] + (sm[j0 * gw + i1] - sm[j0 * gw + i0]) * tx;
+        var bot = sm[j1 * gw + i0] + (sm[j1 * gw + i1] - sm[j1 * gw + i0]) * tx;
+        out[y * w + x] = top + (bot - top) * ty;
+      }
+    }
+    return out;
+  }
+
+  /* Flatten to paper-relative tone and stretch what is left.
+   *
+   *   at or above `white` x paper   -> 255, pure white
+   *   at or below `black` x paper   -> 0, solid black
+   *   between                       -> the grey it earned
+   *
+   * The white clip is what stops paper texture, the lighting gradient and the
+   * pale printed rules from turning the whole page into a dirty wash; below it
+   * nothing is thresholded away, so a pencil line stays a pencil line. */
+  function tone(gray, bg, white, black) {
+    var out = new Uint8ClampedArray(gray.length);
+    var span = white - black;
+    for (var i = 0; i < gray.length; i++) {
+      var b = bg[i] < 24 ? 24 : bg[i];
+      var t = gray[i] / b;
+      out[i] = t >= white ? 255 : t <= black ? 0 : ((t - black) / span) * 255;
+    }
+    return out;
+  }
+
   /* Drop ink blobs too small to be a deliberate mark. Local thresholding
    * always leaves a scatter of one- and two-pixel specks in paper texture;
    * at 200dpi the cut-off here is a dot about a third of a millimetre across,
@@ -194,6 +295,7 @@ window.PS = window.PS || {};
   PS.geom = {
     homography: homography, affine: affine, apply: apply,
     toGray: toGray, warpGray: warpGray, sauvola: sauvola,
+    background: background, tone: tone,
     despeckle: despeckle, solveLinear: solveLinear
   };
 })(window.PS);

@@ -113,16 +113,31 @@ A whole sheet's markers come to 54 rectangles.
 2. **Rectify.** Warp from photo pixels onto a page-millimetre lattice. Output
    resolution is capped at what the source actually resolved — upsampling past
    that only inflates the file.
-3. **Clean.** Sauvola local thresholding, which keys off local standard
-   deviation rather than a flat offset, so blank paper under uneven lighting
-   stays blank instead of breaking into speckle. Then a despeckle pass drops ink
-   blobs smaller than about a third of a millimetre, a hairline of page-edge trim
-   removes the shadow every photographed sheet has, and the markers themselves
-   are erased.
-4. **Export.** Each page becomes a 1-bit Flate-compressed image at its own true
-   page size, so a document can mix A4 and A5 and every sheet comes out right.
+3. **Clean — and it keeps grey.** A photograph of paper has a lighting gradient
+   across it, so "white" is a different number in one corner than another. The
+   page is flat-fielded first: a high quantile per 4mm block, dilated so a block
+   buried under a thick stroke borrows paper from its neighbours, smoothed and
+   interpolated back up. Every pixel is then read as a fraction of its own local
+   paper level, and that fraction is stretched:
 
-Printed rules are pale by design — they sit just above the default ink threshold,
+   - at or above the white point → **255, clean white paper**
+   - at or below the black point → **0, solid black**
+   - in between → **the grey it earned**
+
+   Nothing is thresholded away below the white point, so pencil stays pencil and
+   a shaded diagram stays shaded. **Ink pickup** moves the white point (0.62 to
+   0.94 of paper): low keeps only confident ink, high brings in faint pencil and
+   the pale printed rules.
+
+   Then a despeckle pass drops ink blobs smaller than about a third of a
+   millimetre, a hairline of page-edge trim removes the shadow every
+   photographed sheet has, and the markers themselves are erased.
+4. **Export.** Each page becomes an 8-bit greyscale Flate-compressed image at its
+   own true page size, so a document can mix A4 and A5 and every sheet comes out
+   right. Pages are overwhelmingly pure white, which Flate reduces to almost
+   nothing: a written A4 sheet at 200dpi lands around 25KB.
+
+Printed rules are pale by design — they sit just above the default white point,
 so a scan contains what you wrote rather than the paper you wrote it on. Raise
 **Ink pickup** to bring the rules back (useful for a curve plotted on graph
 paper) or to catch faint pencil.
@@ -184,7 +199,7 @@ src/marker.js       finder/alignment patterns, merged into vector runs
 src/render.js       draw ops -> SVG preview / PDF content
 src/generator.js    sheet composition and export
 src/pdf.js          minimal PDF 1.4 writer
-src/geom.js         homography, perspective warp, Sauvola, despeckle
+src/geom.js         homography, perspective warp, flat-field, tone map, despeckle
 src/finder.js       the 1:1:3:1:1 pattern search
 src/scanner.js      marker detection and rectification
 src/pages.js        capture store, thumbnails, scanned-document PDF

@@ -317,20 +317,35 @@ window.PS = window.PS || {};
     var warped = PS.geom.warpGray(gray, img.width, img.height, H, outW, outH, 1 / scale, 1 / scale);
 
     var strength = opts.strength == null ? 50 : opts.strength;
-    /* Slider 0..100 -> Sauvola k 0.45..0.05. Low k keeps faint marks (and
-     * printed rules); high k keeps only confident ink. */
-    var k = 0.45 - (strength / 100) * 0.40;
-    var mask = PS.geom.sauvola(warped, outW, outH, Math.max(6, Math.round(outW / 40)), k);
+    /* Slider 0..100 -> white point 0.62..0.94 of the local paper level. Low
+     * keeps only confident ink; high keeps faint pencil and the printed rules.
+     * Everything under the white point is kept as grey, not thresholded, and
+     * the black point is what the darkest ink is stretched to. */
+    var white = 0.62 + (strength / 100) * 0.32;
+    var black = white * 0.42;
+
+    var block = Math.max(8, Math.round(4 * scale));   // ~4mm of paper
+    var image = PS.geom.tone(warped, PS.geom.background(warped, outW, outH, block, 0.92),
+                             white, black);
+
+    /* Anything that is not paper, for despeckling and for the tests. */
+    var mask = new Uint8Array(outW * outH);
+    for (var i = 0; i < mask.length; i++) mask[i] = image[i] < 250 ? 1 : 0;
 
     if (opts.despeckle !== false) {
       /* 0.08 mm^2 — a dot roughly a third of a millimetre across. */
       PS.geom.despeckle(mask, outW, outH, Math.max(2, Math.round(0.08 * scale * scale)));
+      for (i = 0; i < mask.length; i++) if (!mask[i]) image[i] = 255;
     }
 
     function clearRect(x0, y0, x1, y1) {
       x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
       x1 = Math.min(outW, Math.ceil(x1)); y1 = Math.min(outH, Math.ceil(y1));
-      for (var y = y0; y < y1; y++) mask.fill(0, y * outW + x0, y * outW + x1);
+      for (var y = y0; y < y1; y++) {
+        var from = y * outW + x0, to = y * outW + x1;
+        mask.fill(0, from, to);
+        image.fill(255, from, to);
+      }
     }
 
     /* The sheet's own edge casts a shadow in any photograph; a hairline of
@@ -349,7 +364,7 @@ window.PS = window.PS || {};
     }
 
     return {
-      mask: mask, width: outW, height: outH, sheet: sheet, dpi: dpi,
+      image: image, mask: mask, width: outW, height: outH, sheet: sheet, dpi: dpi,
       nativeDpi: Math.round(nativeDpi), gray: warped,
       paper: detection.paper, orientation: detection.orientation,
       exact: !!detection.exact

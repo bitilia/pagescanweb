@@ -234,7 +234,10 @@
 
   /* Paper size is the one thing the markers cannot tell us: they carry no
    * payload, and A4, A5 and A3 are all the same shape. */
-  var scan = { paper: 'A4', dpi: 200, strength: 55, hideMarkers: true, pages: [], busy: false };
+  var scan = {
+    paper: 'A4', dpi: 200, strength: 55, hideMarkers: true,
+    pages: [], busy: false, flash: null, flashTimer: null
+  };
   var MAX_SOURCE_DIM = 4200;   // beyond this we gain nothing but memory pressure
 
   function log(kind, text) {
@@ -302,8 +305,9 @@
         return false;
       }
 
-      scan.pages.push(PS.pages.makePage(rect, { name: name }));
-      renderPages();
+      var page = PS.pages.makePage(rect, { name: name });
+      scan.pages.push(page);
+      flashPage(page.id);
 
       var label = PS.PAPER[rect.paper].label + ' ' + (rect.orientation === 'L' ? 'landscape' : 'portrait');
       if (rect.exact) {
@@ -342,6 +346,19 @@
     scan.busy = false;
   }
 
+  /* Mark the card that has just arrived so it announces itself, then let it
+   * settle. Without this a capture is only a line in the log, which is easy
+   * to miss when you are looking at the sheet rather than the screen. */
+  function flashPage(id) {
+    scan.flash = id;
+    renderPages();
+    if (scan.flashTimer) clearTimeout(scan.flashTimer);
+    scan.flashTimer = setTimeout(function () {
+      scan.flash = null;
+      renderPages();
+    }, 1600);
+  }
+
   function renderPages() {
     var list = $('pagelist');
     var count = scan.pages.length;
@@ -356,7 +373,7 @@
     list.innerHTML = '';
     scan.pages.forEach(function (page, index) {
       var li = document.createElement('li');
-      li.className = 'pagecard';
+      li.className = 'pagecard' + (page.id === scan.flash ? ' is-new' : '');
       li.draggable = true;
       li.dataset.index = String(index);
 
@@ -533,7 +550,55 @@
    * Camera
    * ===================================================================== */
 
-  var cam = { stream: null, timer: null, streak: 0, auto: true, working: false };
+  /* After a capture the camera deliberately stops looking. Without the pause
+   * a sheet that is still in frame gets shot again, and — the real problem —
+   * there is no moment where the screen is unambiguously saying "that one is
+   * done, move the next sheet in". */
+  var HOLD_MS = 3200;
+  var HOLD_BAD_MS = 2600;
+
+  var cam = {
+    stream: null, timer: null, streak: 0, auto: true, working: false,
+    holdUntil: 0, holdTimer: null
+  };
+
+  /* Flood the frame with a tick or a cross and hold it there. */
+  function showConfirm(ok, text, ms) {
+    var box = $('camera-confirm');
+    $('camera-confirm-badge').innerHTML = PS.icon(ok ? 'check' : 'cross');
+    $('camera-confirm-text').textContent = text;
+    box.classList.remove('is-ok', 'is-bad');
+    box.classList.add('is-on', ok ? 'is-ok' : 'is-bad');
+    $('camera-hint').classList.toggle('is-bad', !ok);
+    setPips([]);
+
+    cam.holdUntil = Date.now() + ms;
+    if (cam.holdTimer) clearInterval(cam.holdTimer);
+    cam.holdTimer = setInterval(tickHold, 200);
+    tickHold();
+  }
+
+  function clearConfirm() {
+    if (cam.holdTimer) { clearInterval(cam.holdTimer); cam.holdTimer = null; }
+    cam.holdUntil = 0;
+    $('camera-confirm').classList.remove('is-on', 'is-ok', 'is-bad');
+    $('camera-hint').textContent = '';
+    $('camera-hint').classList.remove('is-holding', 'is-bad');
+  }
+
+  function tickHold() {
+    var left = cam.holdUntil - Date.now();
+    var hint = $('camera-hint');
+    if (left <= 0) {
+      clearConfirm();
+      if (cam.stream) $('camera-status').textContent = 'Looking for corner markers…';
+      return;
+    }
+    hint.classList.add('is-holding');
+    hint.textContent = 'Paused — looking again in ' + Math.ceil(left / 1000) + 's';
+  }
+
+  function holding() { return Date.now() < cam.holdUntil; }
 
   function setPips(found) {
     var pips = $('camera-pips').children;
@@ -554,6 +619,7 @@
 
   async function stopCamera() {
     if (cam.timer) { clearInterval(cam.timer); cam.timer = null; }
+    clearConfirm();
     if (cam.stream) {
       cam.stream.getTracks().forEach(function (t) { t.stop(); });
       cam.stream = null;
@@ -566,14 +632,24 @@
   }
 
   async function captureFromCamera() {
-    if (cam.working || scan.busy) return;
+    if (cam.working || scan.busy || holding()) return;
     cam.working = true;
     scan.busy = true;
     var video = $('camera-video');
+    $('camera-shoot').disabled = true;
+    $('camera-status').textContent = 'Reading the sheet…';
     try {
       var canvas = frameToCanvas(video, MAX_SOURCE_DIM);
       var stamp = new Date().toLocaleTimeString();
-      await addCapture(canvas, 'Camera ' + stamp);
+      var ok = await addCapture(canvas, 'Camera ' + stamp);
+      if (ok) {
+        showConfirm(true, 'Page ' + scan.pages.length + ' captured', HOLD_MS);
+        $('camera-status').textContent = 'Page ' + scan.pages.length + ' saved — ' +
+          'put the next sheet down';
+      } else {
+        showConfirm(false, 'Not captured — try again', HOLD_BAD_MS);
+        $('camera-status').textContent = 'Nothing saved — see the message below';
+      }
     } finally {
       cam.working = false;
       scan.busy = false;
@@ -585,7 +661,7 @@
    * needs to say which corners are visible, not rectify anything. */
   async function pollCamera() {
     var video = $('camera-video');
-    if (!cam.stream || cam.working || scan.busy || !video.videoWidth) return;
+    if (!cam.stream || cam.working || scan.busy || holding() || !video.videoWidth) return;
     cam.working = true;
     try {
       var canvas = frameToCanvas(video, 1100);
@@ -609,6 +685,7 @@
     } finally {
       cam.working = false;
     }
+    if (holding()) return;
 
     /* Two consecutive full reads means the shot is steady, not a lucky frame. */
     if (cam.auto && cam.streak >= 2) await captureFromCamera();

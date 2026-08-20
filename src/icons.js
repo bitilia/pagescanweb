@@ -14,7 +14,9 @@ window.PS = window.PS || {};
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     up: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
     down: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
-    files: '<path d="M15.5 2H8.6a.6.6 0 0 0-.6.6v10.8a.6.6 0 0 0 .6.6h9.8a.6.6 0 0 0 .6-.6V5.5L15.5 2z"/><path d="M15 2v4h4"/><path d="M16 18v1.4a.6.6 0 0 1-.6.6H5.6a.6.6 0 0 1-.6-.6V8.6a.6.6 0 0 1 .6-.6H7"/>'
+    files: '<path d="M15.5 2H8.6a.6.6 0 0 0-.6.6v10.8a.6.6 0 0 0 .6.6h9.8a.6.6 0 0 0 .6-.6V5.5L15.5 2z"/><path d="M15 2v4h4"/><path d="M16 18v1.4a.6.6 0 0 1-.6.6H5.6a.6.6 0 0 1-.6-.6V8.6a.6.6 0 0 1 .6-.6H7"/>',
+    check: '<polyline points="4 12.5 9.5 18 20 6.5"/>',
+    cross: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'
   };
 
   function icon(name, size) {

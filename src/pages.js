@@ -10,7 +10,7 @@ window.PS = window.PS || {};
   function makePage(rect, meta) {
     return {
       id: 'p' + (nextId++),
-      mask: rect.mask,
+      image: rect.image,
       width: rect.width,
       height: rect.height,
       sheet: rect.sheet,
@@ -24,8 +24,8 @@ window.PS = window.PS || {};
     };
   }
 
-  /* Area-average the ink mask down to a small greyscale thumbnail; sampling
-   * instead would drop thin pen strokes entirely at this size.
+  /* Area-average the page down to a small thumbnail; sampling instead would
+   * drop thin pen strokes entirely at this size.
    * Cached on the page, since reordering re-renders the whole list. */
   function thumbnail(page, maxDim) {
     if (page.thumb && page.thumbDim === maxDim) return page.thumb;
@@ -49,12 +49,12 @@ window.PS = window.PS || {};
       var y0 = Math.floor(y * sy), y1 = Math.min(page.height, Math.max(y0 + 1, Math.ceil((y + 1) * sy)));
       for (var x = 0; x < w; x++) {
         var x0 = Math.floor(x * sx), x1 = Math.min(page.width, Math.max(x0 + 1, Math.ceil((x + 1) * sx)));
-        var ink = 0, n = 0;
+        var sum = 0, n = 0;
         for (var yy = y0; yy < y1; yy++) {
           var row = yy * page.width;
-          for (var xx = x0; xx < x1; xx++) { ink += page.mask[row + xx]; n++; }
+          for (var xx = x0; xx < x1; xx++) { sum += page.image[row + xx]; n++; }
         }
-        var v = 255 - Math.round((ink / n) * 255);
+        var v = Math.round(sum / n);
         var o = (y * w + x) * 4;
         out.data[o] = out.data[o + 1] = out.data[o + 2] = v;
         out.data[o + 3] = 255;
@@ -68,7 +68,7 @@ window.PS = window.PS || {};
     var doc = new PS.pdf.Doc();
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];
-      var id = await PS.pdf.addBilevelImage(doc, page.mask, page.width, page.height);
+      var id = await PS.pdf.addGrayImage(doc, page.image, page.width, page.height);
       doc.addPage(page.sheet.w, page.sheet.h,
         PS.pdf.Ops.image('Im0', 0, 0, page.sheet.w, page.sheet.h),
         { Im0: id }, false);

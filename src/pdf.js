@@ -203,25 +203,14 @@ window.PS = window.PS || {};
     }
   };
 
-  /* Pack a 0/1 ink mask (1 = ink) into a 1-bit-per-pixel PDF image where
-   * 0 = black, so paper needs to be the set bit. */
-  function packBilevel(mask, w, h) {
-    var rowBytes = (w + 7) >> 3;
-    var out = new Uint8Array(rowBytes * h);
-    for (var y = 0; y < h; y++) {
-      var ro = y * rowBytes, so = y * w;
-      for (var x = 0; x < w; x++) {
-        if (!mask[so + x]) out[ro + (x >> 3)] |= 0x80 >> (x & 7);
-      }
-    }
-    return out;
-  }
-
-  async function addBilevelImage(doc, mask, w, h) {
-    var raw = packBilevel(mask, w, h);
+  /* An 8-bit greyscale image. Pages are overwhelmingly pure white, which
+   * Flate reduces to almost nothing, so keeping tone costs far less than the
+   * eight-fold rise in raw bytes suggests. */
+  async function addGrayImage(doc, gray, w, h) {
+    var raw = gray instanceof Uint8Array ? gray : new Uint8Array(gray.buffer, gray.byteOffset, gray.length);
     var packed = await deflate(raw);
     var dict = '/Type /XObject /Subtype /Image /Width ' + w + ' /Height ' + h +
-      ' /ColorSpace /DeviceGray /BitsPerComponent 1';
+      ' /ColorSpace /DeviceGray /BitsPerComponent 8';
     if (packed && packed.length < raw.length) {
       return doc.add(doc.stream(dict + ' /Filter /FlateDecode', packed));
     }
@@ -234,8 +223,7 @@ window.PS = window.PS || {};
     num: n,
     hexColor: hexColor,
     deflate: deflate,
-    packBilevel: packBilevel,
     textWidth: textWidth,
-    addBilevelImage: addBilevelImage
+    addGrayImage: addGrayImage
   };
 })(window.PS);
