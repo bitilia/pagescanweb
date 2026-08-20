@@ -50,12 +50,11 @@ corners, printed on their own:
 ```
 
 They carry **no payload**. That is the whole point: a symbol that encodes
-`PS1:A4:P:TL` needs 25×25 modules, which at a 10.5mm marker is 0.4mm per module —
+`PS1:A4:P:TL` needs 25×25 modules, which at a 15mm marker is 0.6mm per module —
 fine on a flatbed, marginal in a hand-held photograph. A finder square is seven
-modules across, so the same ink buys **1.5mm modules** — about 1.5× smaller than the earlier
-2.2mm eyes, still coarse enough for a phone photo, and small enough that the
-keep-out no longer eats into the writing area once content is inset past the
-quiet zone.
+modules across, so the same ink buys **2.2mm modules**, three and a half times
+coarser, and the pattern survives blur and grain that would destroy a data
+symbol.
 
 What the markers no longer say, the geometry has to supply:
 
@@ -73,9 +72,7 @@ each axis — which puts it well inside a pixel, and unlike a corner it does not
 drift when the symbol blurs.
 
 Every finder square's outer edge sits 6mm from the page edge, so the four centres
-form a rectangle inset 11.25mm on all sides, whatever the paper size. Template
-rulings start at 19.5mm — past finder plus quiet zone — so the top squares never
-overlap content.
+form a rectangle inset 13.7mm on all sides, whatever the paper size.
 
 Four known points and four measured points give a **homography**: the full
 projective map from page millimetres to photo pixels. That is what lets a photo
@@ -104,7 +101,7 @@ A whole sheet's markers come to 54 rectangles.
 
 ### Scanning
 
-1. **Detect.** Shrink the frame until a 1.5mm module is still a few pixels
+1. **Detect.** Shrink the frame until a 2.2mm module is still a few pixels
    across, threshold it locally, then walk every row and every column looking
    for five consecutive runs of alternating colour in the ratio **1:1:3:1:1**
    (a finder, seen through its core) or **1:1:1:1:1** (an alignment square).
@@ -157,21 +154,21 @@ ink lands after a full detect-and-rectify cycle.
 | capture | markers | worst ink error |
 |---|---|---|
 | A4 portrait, flat | 4/4 | 0.12 mm |
-| A4 portrait, moderate angle | 4/4 | 0.12 mm |
+| A4 portrait, moderate angle | 4/4 | 0.15 mm |
 | A4 portrait, steep angle | 4/4 | 0.14 mm |
 | A4 portrait, upside down | 4/4 | 0.05 mm |
-| A4 landscape | 4/4 | 0.13 mm |
+| A4 landscape | 4/4 | 0.15 mm |
 | A5 portrait / landscape | 4/4 | 0.13 mm |
-| Letter portrait | 4/4 | 0.12 mm |
+| Letter portrait | 4/4 | 0.15 mm |
 | Legal portrait | 4/4 | 0.13 mm |
 | A3 landscape | 4/4 | 0.17 mm |
 | A4, dim and grainy | 4/4 | 0.14 mm |
-| A4, small capture | 4/4 | 0.18 mm |
-| A4 flatbed, one corner clipped | 3/4 (affine) | 0.14 mm |
+| A4, small capture | 4/4 | 0.17 mm |
+| A4 flatbed, one corner clipped | 3/4 (affine) | 0.16 mm |
 
 Printed rules return to their stated positions within 0.03mm, and markers in a
 generated PDF sit within 0.12mm of spec when re-read from a 300dpi render.
-Detection takes about 80–200ms on a 2000×2700 frame.
+Detection takes about 150–250ms on a 2000×2700 frame.
 
 ### Where it stops working
 
@@ -183,8 +180,8 @@ Measured on a 2000×2700 capture of A4 (a modest phone photo):
 - The whole sheet must be in frame. A marker cut off by the frame edge cannot be
   read, and fewer than three leaves nothing to rectify from.
 - A finder square wants roughly **20 pixels across**, so on A4 all four markers
-  survive down to a capture of about **620 pixels on the long side**; three
-  survive to about 440 (the alignment square, being smaller, goes first). Larger
+  survive down to a capture of about **420 pixels on the long side**; three
+  survive to about 300 (the alignment square, being smaller, goes first). Larger
   paper needs proportionally more.
 - Paper size is not in the markers. Scanning an A5 sheet with the control set to
   A4 gives a correctly squared page at the wrong physical size.

@@ -1,7 +1,7 @@
 /* PageScan — reading a photographed or flatbed-scanned sheet back in.
  *
  * Detection is a straight search for the four registration patterns:
- *   1. shrink the frame to a working size where a 1.5mm module is still
+ *   1. shrink the frame to a working size where a 2.2mm module is still
  *      several pixels across, and binarise it with the same Sauvola threshold
  *      the cleaning stage uses;
  *   2. hunt every row and column for the 1:1:3:1:1 (finder) and 1:1:1:1:1
@@ -19,11 +19,11 @@ window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  /* Working resolutions, as a long-side pixel cap. 1400 puts a 1.5mm module
-   * near 7px on A4; 2000 helps large paper, where a marker is a smaller
-   * fraction of the sheet; 1000 trades resolution for the noise suppression
+  /* Working resolutions, as a long-side pixel cap. 1100 puts a 2.2mm module
+   * near 4px on A4; 1600 helps large paper, where a marker is a smaller
+   * fraction of the sheet; 800 trades resolution for the noise suppression
    * that area-averaging down gives you. */
-  var WORK_SCALES = [1400, 2000, 1000];
+  var WORK_SCALES = [1100, 1600, 800];
   var EDGE_TRIM_MM = 1.2;    // photographed sheets carry a dark rim; drop it
   var BUDGET_MS = 6000;
   var MAX_CANDIDATES = 8;    // enough for four markers and a few false alarms

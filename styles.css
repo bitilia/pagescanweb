@@ -71,10 +71,6 @@ button, input, select { font: inherit; color: inherit; }
   content: ''; position: absolute; inset: 7px;
   background: #FFFFFF; border-radius: 2px;
 }
-.brand__mark::before {
-  content: ''; position: absolute; inset: 11px;
-  background: var(--primary); border-radius: 1px;
-}
 .brand__word { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
 
 .modes { display: flex; gap: 4px; background: rgba(255, 255, 255, 0.1); padding: 4px; border-radius: var(--radius); }

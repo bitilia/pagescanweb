@@ -2,7 +2,7 @@
  * The registration patterns a QR code carries in its own corners, printed on
  * their own: a seven-module finder square at three corners and the smaller
  * five-module alignment square at the fourth. They carry no data, which is the
- * point — a module is 1.5mm rather than ~0.4mm, so the marker survives a phone
+ * point — a module is 2.2mm rather than 0.6mm, so the marker survives a phone
  * photograph with room to spare. Drawn as merged vector runs rather than a
  * raster so they stay razor-sharp at any print resolution. */
 window.PS = window.PS || {};
