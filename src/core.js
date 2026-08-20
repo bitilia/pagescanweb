@@ -20,44 +20,33 @@ window.PS = window.PS || {};
 
   /* Corner marker geometry, in mm.
    *
-   * The markers are the plain registration patterns every QR code carries in
-   * its own corners: a seven-module finder square at three corners and the
-   * five-module alignment square at the fourth. Nothing is encoded in them —
-   * they are pure position, which is why their modules can be 2.2mm across
-   * instead of the 0.6mm a data-carrying symbol needs at this size.
+   * Each corner carries an L-shaped registration mark hugging the two page
+   * edges — thick arms in the margin, open toward the writing area — so the
+   * keep-out is two thin strips rather than a filled square. The bottom-right
+   * corner is a T: the same L plus a short inward stem. That odd one out is
+   * what tells the scanner which way up the sheet is.
    *
-   * The fiducial is each marker's CENTRE. A centre is recovered by averaging
-   * dozens of scan lines, so it is far steadier under blur and perspective
-   * than any corner of a symbol, and the four of them form a rectangle inset
-   * by MARK.inset on every side whatever the paper.
-   *
-   * Which corner carries the odd one out is what tells the scanner which way
-   * up the sheet is — the same trick a QR code plays with its three eyes. */
+   * The fiducial is the INNER CROOK of each mark (where the two inner edges
+   * meet). It is recovered by averaging every scan that hits the junction,
+   * which puts it well inside a pixel, and the four crooks form a rectangle
+   * inset by MARK.inset on every side whatever the paper. */
   var MARK = {
-    module: 2.2,       // one module, printed
-    finderModules: 7,  // the familiar QR eye: ring, gap, core
-    alignModules: 5,   // the smaller alignment square
-    edge: 6,           // page edge -> outer edge of a finder square
-    quietModules: 2    // silent margin kept clear of rules
+    width: 2.2,   // arm stroke
+    length: 14,   // arm length along each page edge
+    stem: 8,      // inward stem on the T at BR only
+    edge: 5,      // page edge -> outer face of an arm
+    quiet: 2.2    // silent margin kept clear of rules around each arm
   };
   /* Rounded so the millimetres that reach the PDF and the SVG are the exact
-   * decimals quoted here, not 15.400000000000002. */
+   * decimals quoted here, not 14.000000000000002. */
   function mm(v) { return Math.round(v * 1e6) / 1e6; }
-  MARK.finder = mm(MARK.finderModules * MARK.module);  // 15.4mm
-  MARK.align = mm(MARK.alignModules * MARK.module);    // 11.0mm
-  MARK.quiet = mm(MARK.quietModules * MARK.module);    // 4.4mm
-  MARK.inset = mm(MARK.edge + MARK.finder / 2);        // 13.7mm, edge -> centre
+  MARK.inset = mm(MARK.edge + MARK.width);   // 7.2mm, edge -> crook
 
   var CORNERS = ['TL', 'TR', 'BR', 'BL'];
-  var ALIGN_CORNER = 'BR';   // the one that differs, so "up" is never in doubt
+  var TEE_CORNER = 'BR';   // the one that differs, so "up" is never in doubt
 
   function markKind(corner) {
-    return corner === ALIGN_CORNER ? 'align' : 'finder';
-  }
-
-  /* Side length of the marker at a given corner. */
-  function markSpan(corner) {
-    return corner === ALIGN_CORNER ? MARK.align : MARK.finder;
+    return corner === TEE_CORNER ? 'tee' : 'ell';
   }
 
   /* Outer dimensions of a sheet once orientation is applied. */
@@ -69,8 +58,8 @@ window.PS = window.PS || {};
       : { w: p.w, h: p.h };
   }
 
-  /* The four fiducials — marker centres — in page space (mm, origin
-   * top-left, y down). Order matches CORNERS. */
+  /* The four fiducials — mark crooks — in page space (mm, origin top-left,
+   * y down). Order matches CORNERS. */
   function fiducials(paperCode, orientation) {
     var s = sheetSize(paperCode, orientation), i = MARK.inset;
     return {
@@ -81,25 +70,79 @@ window.PS = window.PS || {};
     };
   }
 
-  /* Bounding box of each marker plus its quiet zone. Template rules are
-   * clipped out of these so nothing intrudes on the pattern. */
+  /* Axis-aligned rectangles covering each arm (and the T stem) plus quiet.
+   * Template rules are clipped out of these so nothing intrudes on a mark;
+   * returning one rect per arm — not one square per corner — leaves the open
+   * diagonal free for rulings and handwriting. */
   function keepouts(paperCode, orientation) {
-    var c = fiducials(paperCode, orientation);
-    return CORNERS.map(function (corner) {
-      var half = markSpan(corner) / 2 + MARK.quiet;
-      return { x: mm(c[corner].x - half), y: mm(c[corner].y - half), w: mm(half * 2), h: mm(half * 2) };
-    });
+    var s = sheetSize(paperCode, orientation);
+    var e = MARK.edge, w = MARK.width, L = MARK.length, q = MARK.quiet;
+    var stem = MARK.stem;
+    var out = [];
+
+    function add(x, y, rw, rh) {
+      out.push({
+        x: mm(Math.max(0, x - q)),
+        y: mm(Math.max(0, y - q)),
+        w: mm(Math.min(s.w, x + rw + q) - Math.max(0, x - q)),
+        h: mm(Math.min(s.h, y + rh + q) - Math.max(0, y - q))
+      });
+    }
+
+    /* TL L */
+    add(e, e, L, w);
+    add(e, e, w, L);
+    /* TR L */
+    add(s.w - e - L, e, L, w);
+    add(s.w - e - w, e, w, L);
+    /* BR T: L plus a stem block in the open diagonal */
+    add(s.w - e - L, s.h - e - w, L, w);
+    add(s.w - e - w, s.h - e - L, w, L);
+    add(s.w - e - w - stem, s.h - e - w - stem, stem, stem);
+    /* BL L */
+    add(e, s.h - e - w, L, w);
+    add(e, s.h - e - L, w, L);
+
+    return out;
   }
 
-  /* Top-left corner of each marker's own square, for drawing. */
-  function markOrigins(paperCode, orientation) {
-    var c = fiducials(paperCode, orientation);
-    var out = {};
-    CORNERS.forEach(function (corner) {
-      var half = markSpan(corner) / 2;
-      out[corner] = { x: mm(c[corner].x - half), y: mm(c[corner].y - half) };
-    });
-    return out;
+  /* Drawing geometry for each corner: crook plus arm rectangles in mm. */
+  function markParts(paperCode, orientation) {
+    var s = sheetSize(paperCode, orientation);
+    var e = MARK.edge, w = MARK.width, L = MARK.length, stem = MARK.stem;
+    var fid = fiducials(paperCode, orientation);
+    return {
+      TL: {
+        kind: 'ell', crook: fid.TL,
+        arms: [
+          { x: e, y: e, w: L, h: w },
+          { x: e, y: e, w: w, h: L }
+        ]
+      },
+      TR: {
+        kind: 'ell', crook: fid.TR,
+        arms: [
+          { x: mm(s.w - e - L), y: e, w: L, h: w },
+          { x: mm(s.w - e - w), y: e, w: w, h: L }
+        ]
+      },
+      BR: {
+        kind: 'tee', crook: fid.BR,
+        arms: [
+          { x: mm(s.w - e - L), y: mm(s.h - e - w), w: L, h: w },
+          { x: mm(s.w - e - w), y: mm(s.h - e - L), w: w, h: L },
+          /* Stem block in the open diagonal, attached to the crook. */
+          { x: mm(s.w - e - w - stem), y: mm(s.h - e - w - stem), w: stem, h: stem }
+        ]
+      },
+      BL: {
+        kind: 'ell', crook: fid.BL,
+        arms: [
+          { x: e, y: mm(s.h - e - w), w: L, h: w },
+          { x: e, y: mm(s.h - e - L), w: w, h: L }
+        ]
+      }
+    };
   }
 
   PS.MM_PER_IN = MM_PER_IN;
@@ -108,12 +151,12 @@ window.PS = window.PS || {};
   PS.PAPER_ORDER = PAPER_ORDER;
   PS.MARK = MARK;
   PS.CORNERS = CORNERS;
-  PS.ALIGN_CORNER = ALIGN_CORNER;
+  PS.TEE_CORNER = TEE_CORNER;
+  PS.ALIGN_CORNER = TEE_CORNER; /* old name kept for any stray callers */
   PS.mm = mm;
   PS.markKind = markKind;
-  PS.markSpan = markSpan;
   PS.sheetSize = sheetSize;
   PS.fiducials = fiducials;
   PS.keepouts = keepouts;
-  PS.markOrigins = markOrigins;
+  PS.markParts = markParts;
 })(window.PS);

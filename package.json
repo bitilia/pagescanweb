@@ -2,7 +2,7 @@
   "name": "pagescan",
   "version": "1.0.0",
   "private": true,
-  "description": "Generate printable sheets with QR corner markers, then scan them back into a PDF. The app itself has no dependencies and no build step; these are for the test suite only.",
+  "description": "Generate printable sheets with corner registration marks, then scan them back into a PDF. The app itself has no dependencies and no build step; these are for the test suite only.",
   "scripts": {
     "test": "node test/roundtrip.js && node test/browser.js",
     "test:geometry": "node test/roundtrip.js",

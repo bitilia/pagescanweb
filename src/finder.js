@@ -1,113 +1,161 @@
-/* PageScan — locating registration patterns in a photograph.
+/* PageScan — locating registration marks in a photograph.
  *
- * This is the classic QR finder search, kept deliberately small. Along every
- * row and every column of a binarised frame we look at five consecutive runs
- * of alternating colour, dark first:
+ * Each corner mark is an L (two thick arms along the page edges) or, at BR,
+ * a T (the same L plus a short inward stem). The fiducial is the inner crook
+ * where the arms meet.
  *
- *   dark light dark light dark
- *     1  :  1  : 3 :  1  :  1     a finder square, seen through its core
- *     1  :  1  : 1 :  1  :  1     an alignment square
+ * Detection walks every dark pixel of a binarised frame and asks whether the
+ * four cardinal dark-runs out of that pixel look like a crook:
  *
- * A single line proves nothing — a staff of music or a row of grid dots can
- * produce the same run lengths by accident — so a candidate only survives if
- * rows AND columns agree on the same spot. Anything linear fails that test by
- * construction, which is most of what a ruled sheet contains.
+ *   long dark along two neighbouring directions (the arms),
+ *   short / open along the other two (the open diagonal),
+ *   arm thickness near the stroke width.
  *
- * The centre is then the mean of every line that hit it, thirty-odd samples
- * in each axis, which lands it well inside a pixel. */
+ * A T is the same crook with a third long dark run (the stem). One line
+ * proves nothing, so a spot only counts when many neighbouring crook hits
+ * cluster on it — averaging them lands the centre well inside a pixel.
+ *
+ * Four orientations of L are accepted; paper rotation in the photograph is
+ * free. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  var MIN_MODULE = 1.5;    // px; below this a "pattern" is just sensor noise
-  var RUN_TOL = 0.45;      // how far each single-module run may stray
-  var MAX_HITS = 60000;    // hard ceiling on line hits, so noise cannot stall us
-  var MIN_LINES = 3;       // minimum hits per axis before a cluster is believed
+  var MIN_WIDTH = 1.5;     // px; below this a "stroke" is just sensor noise
+  var MAX_WIDTH = 48;      // px; above this we are looking at a ruled block
+  var ARM_MIN = 3.5;       // arms must be at least this many widths long
+  var OPEN_MAX = 1.6;      // open directions may only run this many widths
+  var RUN_TOL = 0.55;      // how far arm thickness may stray from the unit
+  var MAX_HITS = 80000;
+  var MIN_HITS = 4;        // minimum crook hits before a cluster is believed
 
-  /* Which shape, if any, these five run lengths describe. */
-  function classify(a, b, c, d, e) {
-    var unit = (a + b + d + e) / 4;
-    if (unit < MIN_MODULE) return 0;
-    var lo = unit * (1 - RUN_TOL), hi = unit * (1 + RUN_TOL);
-    if (a < lo || a > hi || b < lo || b > hi || d < lo || d > hi || e < lo || e > hi) return 0;
-    var ratio = c / unit;
-    if (ratio >= 2.15 && ratio <= 3.95) return 7;   // finder: total is 7 modules
-    if (ratio >= 0.55 && ratio <= 1.55) return 5;   // alignment: total is 5
-    return 0;
+  /* Contiguous dark length from (x,y) exclusive step in (dx,dy). */
+  function run(mask, w, h, x, y, dx, dy) {
+    var n = 0, cx = x + dx, cy = y + dy;
+    while (cx >= 0 && cy >= 0 && cx < w && cy < h && mask[cy * w + cx]) {
+      n++;
+      cx += dx;
+      cy += dy;
+    }
+    return n;
   }
 
-  /* Walk one axis of the mask, emitting a hit for every five-run window that
-   * classifies. `vertical` swaps the roles of rows and columns. */
-  function scanAxis(mask, w, h, vertical, hits) {
-    var lines = vertical ? w : h;
-    var count = vertical ? h : w;
-    var step = vertical ? w : 1;
-    var at = new Int32Array(count + 1), len = new Int32Array(count + 1);
+  /* Thickness of a dark stroke measured perpendicular to an arm that leaves
+   * the crook in direction (adx, ady). Sample a few steps along the arm and
+   * average the short dark runs across it. */
+  function thickness(mask, w, h, x, y, adx, ady) {
+    var pdx = -ady, pdy = adx;   // perpendicular
+    var sum = 0, n = 0, step;
+    for (step = 2; step <= 8; step += 2) {
+      var ax = x + adx * step, ay = y + ady * step;
+      if (ax < 0 || ay < 0 || ax >= w || ay >= h || !mask[ay * w + ax]) continue;
+      var a = run(mask, w, h, ax, ay, pdx, pdy);
+      var b = run(mask, w, h, ax, ay, -pdx, -pdy);
+      /* Include the centre pixel itself. */
+      sum += a + b + 1;
+      n++;
+    }
+    return n ? sum / n : 0;
+  }
 
-    for (var i = 0; i < lines; i++) {
-      if (hits.n >= MAX_HITS) return;
-      var base = vertical ? i : i * w;
-      var n = 0, prev = mask[base], from = 0, j, v;
+  /* Which shape, if any, the four cardinal dark-runs describe at (x, y).
+   * Returns null or { kind, width, openX, openY }. open* is the unit vector
+   * into the open diagonal (toward page centre for a true mark). */
+  function classify(mask, w, h, x, y) {
+    if (!mask[y * w + x]) return null;
 
-      for (j = 1; j < count; j++) {
-        v = mask[base + j * step];
-        if (v === prev) continue;
-        at[n] = from; len[n] = j - from; n++;
-        prev = v; from = j;
-      }
-      at[n] = from; len[n] = count - from; n++;
+    var N = run(mask, w, h, x, y, 0, -1);
+    var S = run(mask, w, h, x, y, 0, 1);
+    var E = run(mask, w, h, x, y, 1, 0);
+    var W = run(mask, w, h, x, y, -1, 0);
 
-      /* Run 0 and run n-1 are clipped by the frame edge, so their lengths mean
-       * nothing; skip any window that leans on them. A marker cut off by the
-       * edge of the photograph is unusable anyway. */
-      var firstDark = mask[base] === 1;
-      for (var k = 1; k + 5 < n; k++) {
-        if ((k % 2 === 0) !== firstDark) continue;   // window must start dark
-        var total = classify(len[k], len[k + 1], len[k + 2], len[k + 3], len[k + 4]);
-        if (!total) continue;
-        var mid = at[k + 2] + len[k + 2] / 2;
-        var span = len[k] + len[k + 1] + len[k + 2] + len[k + 3] + len[k + 4];
-        hits.push(vertical ? i + 0.5 : mid, vertical ? mid : i + 0.5,
-                  span / total, total === 7 ? 1 : 0, vertical ? 1 : 0);
+    /* Four L orientations: the two long arms and the open quadrant. */
+    var trials = [
+      { a: N, b: W, o1: S, o2: E, adx: 0, ady: -1, bdx: -1, bdy: 0, ox: 1, oy: 1 },
+      { a: N, b: E, o1: S, o2: W, adx: 0, ady: -1, bdx: 1, bdy: 0, ox: -1, oy: 1 },
+      { a: S, b: W, o1: N, o2: E, adx: 0, ady: 1, bdx: -1, bdy: 0, ox: 1, oy: -1 },
+      { a: S, b: E, o1: N, o2: W, adx: 0, ady: 1, bdx: 1, bdy: 0, ox: -1, oy: -1 }
+    ];
+
+    var best = null, bestScore = 0, t, i;
+    for (i = 0; i < trials.length; i++) {
+      t = trials[i];
+      var ta = thickness(mask, w, h, x, y, t.adx, t.ady);
+      var tb = thickness(mask, w, h, x, y, t.bdx, t.bdy);
+      if (ta < MIN_WIDTH || tb < MIN_WIDTH) continue;
+      var unit = (ta + tb) / 2;
+      if (unit > MAX_WIDTH) continue;
+      if (Math.abs(ta - tb) > unit * RUN_TOL) continue;
+
+      if (t.a < unit * ARM_MIN || t.b < unit * ARM_MIN) continue;
+      if (t.o1 > unit * OPEN_MAX || t.o2 > unit * OPEN_MAX) continue;
+
+      /* Arms should not be wildly longer than the printed length (~6.4 widths),
+       * but perspective and merged content can stretch a reading — keep a soft
+       * ceiling so a full page-edge rule cannot pass as an arm. */
+      if (t.a > unit * 14 || t.b > unit * 14) continue;
+
+      var score = Math.min(t.a, t.b) / unit;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { unit: unit, t: t, N: N, S: S, E: E, W: W };
       }
     }
+    if (!best) return null;
+
+    unit = best.unit;
+    t = best.t;
+
+    /* A T places a stem block in the open content quadrant (opposite the two
+     * short edge-through-thickness directions). Sample near the middle of
+     * that block; ink there means we have a tee. */
+    var reach = unit * (PS.MARK.stem / PS.MARK.width) * 0.45;
+    var sx = Math.round(x - t.ox * reach);
+    var sy = Math.round(y - t.oy * reach);
+    var tee = sx >= 0 && sy >= 0 && sx < w && sy < h && !!mask[sy * w + sx];
+
+    return {
+      kind: tee ? 'tee' : 'ell',
+      width: unit,
+      ox: t.ox,
+      oy: t.oy
+    };
   }
 
   function hitStore() {
     return {
-      n: 0, x: [], y: [], module: [], finder: [], vertical: [],
-      push: function (x, y, module, finder, vertical) {
+      n: 0, x: [], y: [], module: [], tee: [],
+      push: function (x, y, module, tee) {
         if (this.n >= MAX_HITS) return;
         this.x.push(x); this.y.push(y); this.module.push(module);
-        this.finder.push(finder); this.vertical.push(vertical);
+        this.tee.push(tee);
         this.n++;
       }
     };
   }
 
-  /* Gather hits that sit on top of each other. Every line through one marker
-   * reports a point within a couple of modules of its centre, and two markers
-   * are never closer than a corner of the sheet is to another. */
+  /* Gather crook hits that sit on top of each other. Every pixel around one
+   * junction reports within about a stroke width of the true crook, and two
+   * markers are never closer than a corner of the sheet is to another. */
   function cluster(hits) {
     var out = [];
     for (var i = 0; i < hits.n; i++) {
       var x = hits.x[i], y = hits.y[i], m = hits.module[i];
-      var tol = m * 2.2, best = null, bestD = Infinity;
+      var tol = m * 2.5, best = null, bestD = Infinity;
       for (var c = 0; c < out.length; c++) {
         var g = out[c];
         var cx = g.sx / g.n, cy = g.sy / g.n;
         if (Math.abs(cx - x) > tol || Math.abs(cy - y) > tol) continue;
-        if (g.sm / g.n > m * 2 || m > (g.sm / g.n) * 2) continue;
+        if (g.sm / g.n > m * 2.5 || m > (g.sm / g.n) * 2.5) continue;
         var d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
         if (d < bestD) { bestD = d; best = g; }
       }
       if (!best) {
-        best = { sx: 0, sy: 0, sm: 0, n: 0, nv: 0, nh: 0, finder: 0 };
+        best = { sx: 0, sy: 0, sm: 0, n: 0, tee: 0 };
         out.push(best);
       }
       best.sx += x; best.sy += y; best.sm += m; best.n++;
-      best.finder += hits.finder[i];
-      if (hits.vertical[i]) best.nv++; else best.nh++;
+      best.tee += hits.tee[i];
     }
     return out;
   }
@@ -115,17 +163,26 @@ window.PS = window.PS || {};
   /* Candidate markers in one binarised frame, strongest support first. */
   function centres(mask, w, h) {
     var hits = hitStore();
-    scanAxis(mask, w, h, false, hits);
-    scanAxis(mask, w, h, true, hits);
+    /* Stride by ~half a minimum stroke so we still sample every crook several
+     * times without visiting every pixel on a 1600px frame. */
+    var step = 2;
+    for (var y = 1; y < h - 1; y += step) {
+      for (var x = 1; x < w - 1; x += step) {
+        if (hits.n >= MAX_HITS) break;
+        var c = classify(mask, w, h, x, y);
+        if (!c) continue;
+        hits.push(x + 0.5, y + 0.5, c.width, c.kind === 'tee' ? 1 : 0);
+      }
+    }
 
     return cluster(hits)
-      .filter(function (g) { return g.nh >= MIN_LINES && g.nv >= MIN_LINES; })
+      .filter(function (g) { return g.n >= MIN_HITS; })
       .map(function (g) {
         return {
           x: g.sx / g.n, y: g.sy / g.n,
           module: g.sm / g.n,
-          kind: g.finder * 2 >= g.n ? 'finder' : 'align',
-          support: Math.min(g.nh, g.nv)
+          kind: g.tee * 2 >= g.n ? 'tee' : 'ell',
+          support: g.n
         };
       })
       .sort(function (a, b) { return b.support - a.support; });

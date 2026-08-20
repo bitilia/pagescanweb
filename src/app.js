@@ -44,8 +44,7 @@
 
   /* Tile thumbnails are drawn at tile scale rather than shrinking the real
    * sheet: at 60px wide the actual rules would fall below one pixel. The
-   * corner markers are the shared motif — every sheet has them, three large
-   * and one small, in that arrangement. */
+   * corner L-marks are the shared motif — every sheet has three L's and a T. */
   function tileArt(id) {
     var body = '';
     var line = function (y) { return '<rect x="4" y="' + y + '" width="22" height="0.9" opacity="0.55"/>'; };
@@ -69,12 +68,12 @@
          plus a real gap is what reads as a stave. */
       for (var g = 0; g < 2; g++) for (var l = 0; l < 5; l++) body += line(11 + g * 16 + l * 2.2);
     }
-    /* corner markers: finders at TL, TR and BL, the smaller alignment square
-       at BR — the same asymmetry that tells the scanner which way is up */
-    [[3, 3, 3.4], [23.6, 3, 3.4], [3, 33.6, 3.4], [24.6, 34.6, 2.4]].forEach(function (p) {
-      body += '<rect x="' + p[0] + '" y="' + p[1] + '" width="' + p[2] +
-        '" height="' + p[2] + '" rx="0.3" opacity="0.9"/>';
-    });
+    /* corner markers: L at TL/TR/BL, T at BR — the asymmetry names "up" */
+    body += '<rect x="2" y="2" width="5" height="1.2" opacity="0.9"/><rect x="2" y="2" width="1.2" height="5" opacity="0.9"/>';
+    body += '<rect x="23" y="2" width="5" height="1.2" opacity="0.9"/><rect x="26.8" y="2" width="1.2" height="5" opacity="0.9"/>';
+    body += '<rect x="2" y="36.8" width="5" height="1.2" opacity="0.9"/><rect x="2" y="33" width="1.2" height="5" opacity="0.9"/>';
+    body += '<rect x="23" y="36.8" width="5" height="1.2" opacity="0.9"/><rect x="26.8" y="33" width="1.2" height="5" opacity="0.9"/>';
+    body += '<rect x="23.5" y="33.5" width="3.2" height="3.2" opacity="0.9"/>';
     return '<svg class="tile__art" viewBox="0 0 30 40" fill="currentColor" aria-hidden="true">' + body + '</svg>';
   }
 
@@ -144,7 +143,7 @@
       ['Sheet', PS.PAPER[gen.paper].label + ' ' + (gen.orientation === 'L' ? 'landscape' : 'portrait')],
       ['Size', sheet.w + ' × ' + sheet.h + ' mm'],
       [t.spacing ? 'Spacing' : 'Ruling', t.spacing ? gen.spacing + ' mm' : t.label],
-      ['Markers', '3 × ' + PS.MARK.finder + ' mm + 1 × ' + PS.MARK.align + ' mm']
+      ['Markers', '3 × L + 1 × T · ' + PS.MARK.width + ' × ' + PS.MARK.length + ' mm']
     ];
     $('preview-facts').innerHTML = facts.map(function (f) {
       return '<div><dt>' + f[0] + '</dt><dd>' + f[1] + '</dd></div>';

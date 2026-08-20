@@ -2,7 +2,9 @@
  * Each template emits an abstract draw-op list in mm (origin top-left, y
  * down). The same list feeds the SVG preview and the PDF exporter, so what
  * you see is literally what gets printed. Rules are clipped out of the
- * corner keep-out boxes so nothing ever intrudes on a marker's quiet zone. */
+ * corner keep-out boxes so nothing ever intrudes on a marker's quiet zone.
+ * Keep-outs are one rectangle per arm, so the open diagonal of each L stays
+ * free for rulings. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
