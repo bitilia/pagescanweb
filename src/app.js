@@ -68,7 +68,7 @@
          plus a real gap is what reads as a stave. */
       for (var g = 0; g < 2; g++) for (var l = 0; l < 5; l++) body += line(11 + g * 16 + l * 2.2);
     }
-    /* corner markers: L at TL/TR/BL, T at BR — the asymmetry names "up" */
+    /* corner markers: L at TL/TR/BL, alignment square at BR — the asymmetry names "up" */
     body += '<rect x="2" y="2" width="5" height="1.2" opacity="0.9"/><rect x="2" y="2" width="1.2" height="5" opacity="0.9"/>';
     body += '<rect x="23" y="2" width="5" height="1.2" opacity="0.9"/><rect x="26.8" y="2" width="1.2" height="5" opacity="0.9"/>';
     body += '<rect x="2" y="36.8" width="5" height="1.2" opacity="0.9"/><rect x="2" y="33" width="1.2" height="5" opacity="0.9"/>';
