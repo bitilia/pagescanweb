@@ -1,61 +1,87 @@
 /* PageScan — corner markers.
- * L-shaped registration marks in three corners and a five-module alignment
- * square at the fourth. The L arms hug the page edges so the open diagonal
- * stays free for writing; the alignment square is the orientation cue. */
+ * The registration patterns a QR code carries in its own corners, printed on
+ * their own: a seven-module finder square at three corners and the smaller
+ * five-module alignment square at the fourth. They carry no data, which is the
+ * point — a module is 1.5mm rather than ~0.4mm, so the marker survives a phone
+ * photograph with room to spare. Drawn as merged vector runs rather than a
+ * raster so they stay razor-sharp at any print resolution. */
 window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  var ALIGN = [
-    '11111',
-    '10001',
-    '10101',
-    '10001',
-    '11111'
-  ];
+  /* Ring, gap, core — the 1:1:3:1:1 cross-section is what the scanner hunts
+   * for along every row and column of the photograph. */
+  var PATTERN = {
+    finder: [
+      '1111111',
+      '1000001',
+      '1011101',
+      '1011101',
+      '1011101',
+      '1000001',
+      '1111111'
+    ],
+    align: [
+      '11111',
+      '10001',
+      '10101',
+      '10001',
+      '11111'
+    ]
+  };
 
-  function alignRuns() {
-    var out = [], r, c;
-    for (r = 0; r < ALIGN.length; r++) {
-      c = 0;
-      while (c < ALIGN[r].length) {
-        if (ALIGN[r].charCodeAt(c) !== 49) { c++; continue; }
+  var cache = Object.create(null);
+
+  function matrix(kind) {
+    if (cache[kind]) return cache[kind];
+    var rows = PATTERN[kind];
+    if (!rows) throw new Error('unknown marker ' + kind);
+    var size = rows.length;
+    var cells = new Uint8Array(size * size);
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) cells[r * size + c] = rows[r].charCodeAt(c) === 49 ? 1 : 0;
+    }
+    var m = { size: size, cells: cells };
+    cache[kind] = m;
+    return m;
+  }
+
+  /* Collapse each row into runs, so a finder costs 15 rects rather than 33. */
+  function runs(m) {
+    var out = [];
+    for (var r = 0; r < m.size; r++) {
+      var c = 0;
+      while (c < m.size) {
+        if (!m.cells[r * m.size + c]) { c++; continue; }
         var start = c;
-        while (c < ALIGN[r].length && ALIGN[r].charCodeAt(c) === 49) c++;
+        while (c < m.size && m.cells[r * m.size + c]) c++;
         out.push({ row: r, col: start, len: c - start });
       }
     }
     return out;
   }
 
-  var ALIGN_RUNS = alignRuns();
-
   /* Draw ops for all four markers of a sheet, in mm. */
   function ops(paperCode, orientation) {
-    var parts = PS.markParts(paperCode, orientation);
-    var unit = PS.MARK.width;
+    var origins = PS.markOrigins(paperCode, orientation);
+    var unit = PS.MARK.module;
     var out = [];
     PS.CORNERS.forEach(function (corner) {
-      var p = parts[corner];
-      if (p.align) {
-        ALIGN_RUNS.forEach(function (run) {
-          out.push({
-            k: 'rect',
-            x: PS.mm(p.align.x + run.col * unit),
-            y: PS.mm(p.align.y + run.row * unit),
-            w: PS.mm(run.len * unit),
-            h: unit,
-            fill: '#111827'
-          });
+      var m = matrix(PS.markKind(corner));
+      var o = origins[corner];
+      runs(m).forEach(function (run) {
+        out.push({
+          k: 'rect',
+          x: PS.mm(o.x + run.col * unit),
+          y: PS.mm(o.y + run.row * unit),
+          w: PS.mm(run.len * unit),
+          h: unit,
+          fill: '#111827'
         });
-      } else {
-        p.arms.forEach(function (a) {
-          out.push({ k: 'rect', x: a.x, y: a.y, w: a.w, h: a.h, fill: '#111827' });
-        });
-      }
+      });
     });
     return out;
   }
 
-  PS.marker = { ops: ops, ALIGN: ALIGN };
+  PS.marker = { PATTERN: PATTERN, matrix: matrix, runs: runs, ops: ops };
 })(window.PS);

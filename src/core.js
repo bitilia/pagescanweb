@@ -20,36 +20,48 @@ window.PS = window.PS || {};
 
   /* Corner marker geometry, in mm.
    *
-   * Each corner carries an L-shaped registration mark hugging the two page
-   * edges — thick arms in the margin, open toward the writing area — so the
-   * keep-out is two thin strips rather than a filled square. The bottom-right
-   * corner is a five-module alignment square. That odd one out is what tells
-   * the scanner which way up the sheet is.
+   * The markers are the plain registration patterns every QR code carries in
+   * its own corners: a seven-module finder square at three corners and the
+   * five-module alignment square at the fourth. Nothing is encoded in them —
+   * they are pure position. Modules are 1.5mm (about 1.5× smaller than the
+   * earlier 2.2mm eyes) so the keep-out stays out of the writing area once
+   * content is inset past the quiet zone.
    *
-   * The fiducial is the JOINT CENTRE of each L (where the two arm midlines
-   * meet) and the centre of the alignment square. Joint centres are recovered
-   * by averaging edge samples along both arms, which puts them well inside a
-   * pixel, and the four fiducials form a rectangle inset by MARK.inset on
-   * every side whatever the paper. */
+   * The fiducial is each marker's CENTRE. A centre is recovered by averaging
+   * dozens of scan lines, so it is far steadier under blur and perspective
+   * than any corner of a symbol, and the four of them form a rectangle inset
+   * by MARK.inset on every side whatever the paper.
+   *
+   * Which corner carries the odd one out is what tells the scanner which way
+   * up the sheet is — the same trick a QR code plays with its three eyes. */
   var MARK = {
-    width: 2.2,      // L-arm stroke
-    length: 14,      // L-arm length along each page edge
-    alignModules: 5, // solid ring alignment square at BR
-    edge: 5,         // page edge -> outer face of an L arm / align square
-    quiet: 2.2       // silent margin kept clear of rules around each mark
+    module: 1.5,       // one module, printed (~1.5× smaller than 2.2mm)
+    finderModules: 7,  // the familiar QR eye: ring, gap, core
+    alignModules: 5,   // the smaller alignment square
+    edge: 6,           // page edge -> outer edge of a finder square
+    quietModules: 2    // silent margin kept clear of rules
   };
   /* Rounded so the millimetres that reach the PDF and the SVG are the exact
-   * decimals quoted here, not 14.000000000000002. */
+   * decimals quoted here, not 10.500000000000002. */
   function mm(v) { return Math.round(v * 1e6) / 1e6; }
-  MARK.align = mm(MARK.alignModules * MARK.width);  // 11.0mm
-  MARK.inset = mm(MARK.edge + MARK.width / 2);       // 6.1mm, edge -> joint centre
-  /* Align square is centred on the same inset as the L joint centres. */
+  MARK.finder = mm(MARK.finderModules * MARK.module);  // 10.5mm
+  MARK.align = mm(MARK.alignModules * MARK.module);    // 7.5mm
+  MARK.quiet = mm(MARK.quietModules * MARK.module);    // 3.0mm
+  MARK.inset = mm(MARK.edge + MARK.finder / 2);        // 11.25mm, edge -> centre
+  /* Content must start beyond the finder + quiet zone so top markers never
+   * sit on rulings or handwriting. Same figure on every side. */
+  MARK.content = mm(MARK.edge + MARK.finder + MARK.quiet); // 19.5mm
 
   var CORNERS = ['TL', 'TR', 'BR', 'BL'];
-  var TEE_CORNER = 'BR';   // the one that differs, so "up" is never in doubt
+  var ALIGN_CORNER = 'BR';   // the one that differs, so "up" is never in doubt
 
   function markKind(corner) {
-    return corner === TEE_CORNER ? 'tee' : 'ell';
+    return corner === ALIGN_CORNER ? 'align' : 'finder';
+  }
+
+  /* Side length of the marker at a given corner. */
+  function markSpan(corner) {
+    return corner === ALIGN_CORNER ? MARK.align : MARK.finder;
   }
 
   /* Outer dimensions of a sheet once orientation is applied. */
@@ -61,8 +73,8 @@ window.PS = window.PS || {};
       : { w: p.w, h: p.h };
   }
 
-  /* The four fiducials — mark crooks — in page space (mm, origin top-left,
-   * y down). Order matches CORNERS. */
+  /* The four fiducials — marker centres — in page space (mm, origin
+   * top-left, y down). Order matches CORNERS. */
   function fiducials(paperCode, orientation) {
     var s = sheetSize(paperCode, orientation), i = MARK.inset;
     return {
@@ -73,77 +85,25 @@ window.PS = window.PS || {};
     };
   }
 
-  /* Axis-aligned rectangles covering each arm (and the BR align square) plus
-   * quiet. Template rules are clipped out of these so nothing intrudes on a
-   * mark; returning one rect per arm — not one square per corner — leaves the
-   * open diagonal free for rulings and handwriting. */
+  /* Bounding box of each marker plus its quiet zone. Template rules are
+   * clipped out of these so nothing intrudes on the pattern. */
   function keepouts(paperCode, orientation) {
-    var s = sheetSize(paperCode, orientation);
-    var e = MARK.edge, w = MARK.width, L = MARK.length, q = MARK.quiet;
-    var a = MARK.align;
-    var out = [];
-
-    function add(x, y, rw, rh) {
-      out.push({
-        x: mm(Math.max(0, x - q)),
-        y: mm(Math.max(0, y - q)),
-        w: mm(Math.min(s.w, x + rw + q) - Math.max(0, x - q)),
-        h: mm(Math.min(s.h, y + rh + q) - Math.max(0, y - q))
-      });
-    }
-
-    /* TL L */
-    add(e, e, L, w);
-    add(e, e, w, L);
-    /* TR L */
-    add(s.w - e - L, e, L, w);
-    add(s.w - e - w, e, w, L);
-    /* BR alignment square, centred on the same inset as the L joints */
-    add(s.w - MARK.inset - a / 2, s.h - MARK.inset - a / 2, a, a);
-    /* BL L */
-    add(e, s.h - e - w, L, w);
-    add(e, s.h - e - L, w, L);
-
-    return out;
+    var c = fiducials(paperCode, orientation);
+    return CORNERS.map(function (corner) {
+      var half = markSpan(corner) / 2 + MARK.quiet;
+      return { x: mm(c[corner].x - half), y: mm(c[corner].y - half), w: mm(half * 2), h: mm(half * 2) };
+    });
   }
 
-  /* Drawing geometry for each corner. */
-  function markParts(paperCode, orientation) {
-    var s = sheetSize(paperCode, orientation);
-    var e = MARK.edge, w = MARK.width, L = MARK.length, a = MARK.align;
-    var fid = fiducials(paperCode, orientation);
-    return {
-      TL: {
-        kind: 'ell', crook: fid.TL,
-        arms: [
-          { x: e, y: e, w: L, h: w },
-          { x: e, y: e, w: w, h: L }
-        ]
-      },
-      TR: {
-        kind: 'ell', crook: fid.TR,
-        arms: [
-          { x: mm(s.w - e - L), y: e, w: L, h: w },
-          { x: mm(s.w - e - w), y: e, w: w, h: L }
-        ]
-      },
-      BR: {
-        kind: 'tee', crook: fid.BR,
-        arms: [],
-        align: {
-          x: mm(s.w - MARK.inset - a / 2),
-          y: mm(s.h - MARK.inset - a / 2),
-          size: a
-        }
-      },
-      BL: {
-        kind: 'ell', crook: fid.BL,
-        arms: [
-          { x: e, y: mm(s.h - e - w), w: L, h: w },
-          { x: e, y: mm(s.h - e - L), w: w, h: L }
-        ]
-      }
-    };
+  /* Top-left corner of each marker's own square, for drawing. */
+  function markOrigins(paperCode, orientation) {
+    var c = fiducials(paperCode, orientation);
+    var out = {};
+    CORNERS.forEach(function (corner) {
+      var half = markSpan(corner) / 2;
+      out[corner] = { x: mm(c[corner].x - half), y: mm(c[corner].y - half) };
+    });
+    return out;
   }
 
   PS.MM_PER_IN = MM_PER_IN;
@@ -152,12 +112,12 @@ window.PS = window.PS || {};
   PS.PAPER_ORDER = PAPER_ORDER;
   PS.MARK = MARK;
   PS.CORNERS = CORNERS;
-  PS.TEE_CORNER = TEE_CORNER;
-  PS.ALIGN_CORNER = TEE_CORNER; /* old name kept for any stray callers */
+  PS.ALIGN_CORNER = ALIGN_CORNER;
   PS.mm = mm;
   PS.markKind = markKind;
+  PS.markSpan = markSpan;
   PS.sheetSize = sheetSize;
   PS.fiducials = fiducials;
   PS.keepouts = keepouts;
-  PS.markParts = markParts;
+  PS.markOrigins = markOrigins;
 })(window.PS);

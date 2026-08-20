@@ -1,11 +1,12 @@
 /* PageScan — reading a photographed or flatbed-scanned sheet back in.
  *
- * Detection is a straight search for the four registration marks:
- *   1. shrink the frame to a working size where a 2.2mm stroke is still
+ * Detection is a straight search for the four registration patterns:
+ *   1. shrink the frame to a working size where a 1.5mm module is still
  *      several pixels across, and binarise it with the same Sauvola threshold
  *      the cleaning stage uses;
- *   2. hunt for L-crooks and the BR alignment square — see finder.js — and
- *      keep the spots with enough agreeing hits;
+ *   2. hunt every row and column for the 1:1:3:1:1 (finder) and 1:1:1:1:1
+ *      (alignment) run patterns, and keep the spots where rows and columns
+ *      agree — see finder.js;
  *   3. pick the four that best describe a sheet, name them from the alignment
  *      square (which sits at BR and nowhere else), and re-read each one from a
  *      tight native-resolution crop so the fiducials carry full precision.
@@ -18,11 +19,11 @@ window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  /* Working resolutions, as a long-side pixel cap. 1100 puts a 2.2mm stroke
-   * near 4px on A4; 1600 helps large paper, where a marker is a smaller
-   * fraction of the sheet; 800 trades resolution for the noise suppression
+  /* Working resolutions, as a long-side pixel cap. 1400 puts a 1.5mm module
+   * near 7px on A4; 2000 helps large paper, where a marker is a smaller
+   * fraction of the sheet; 1000 trades resolution for the noise suppression
    * that area-averaging down gives you. */
-  var WORK_SCALES = [1100, 1600, 800];
+  var WORK_SCALES = [1400, 2000, 1000];
   var EDGE_TRIM_MM = 1.2;    // photographed sheets carry a dark rim; drop it
   var BUDGET_MS = 6000;
   var MAX_CANDIDATES = 8;    // enough for four markers and a few false alarms
@@ -87,8 +88,7 @@ window.PS = window.PS || {};
     return found.slice(0, MAX_CANDIDATES).map(function (c) {
       return {
         x: (img.ox || 0) + c.x * back, y: (img.oy || 0) + c.y * back,
-        module: c.module * back, kind: c.kind, support: c.support,
-        ox: c.ox, oy: c.oy
+        module: c.module * back, kind: c.kind, support: c.support
       };
     });
   }
@@ -98,18 +98,18 @@ window.PS = window.PS || {};
   /* Name the markers. The alignment square is printed at one corner only, so
    * finding it fixes the sheet's rotation outright; the rest follow from the
    * winding order, which a photograph preserves because paper cannot be
-   * mirrored. Without it, the top-left L is the one whose two neighbours
+   * mirrored. Without it, the top-left finder is the one whose two neighbours
    * subtend a right angle. */
   function assign(points) {
-    var tees = points.filter(function (p) { return p.kind === 'tee'; });
-    var ells = points.filter(function (p) { return p.kind === 'ell'; });
+    var aligns = points.filter(function (p) { return p.kind === 'align'; });
+    var finders = points.filter(function (p) { return p.kind === 'finder'; });
     var hits = {}, i;
 
     function vec(from, to) { return { x: to.x - from.x, y: to.y - from.y }; }
 
-    if (tees.length && ells.length >= 2) {
-      var br = tees[0];
-      var us = ells.slice(0, 3).map(function (f) { return { p: f, u: vec(br, f) }; });
+    if (aligns.length && finders.length >= 2) {
+      var br = aligns[0];
+      var us = finders.slice(0, 3).map(function (f) { return { p: f, u: vec(br, f) }; });
       hits.BR = br;
 
       if (us.length === 3) {
@@ -137,8 +137,8 @@ window.PS = window.PS || {};
       return hits;
     }
 
-    if (ells.length >= 3) {
-      var f = ells.slice(0, 3), bestI = -1, bestErr = Infinity;
+    if (finders.length >= 3) {
+      var f = finders.slice(0, 3), bestI = -1, bestErr = Infinity;
       for (i = 0; i < 3; i++) {
         var u = vec(f[i], f[(i + 1) % 3]), v = vec(f[i], f[(i + 2) % 3]);
         var lu = Math.hypot(u.x, u.y), lv = Math.hypot(v.x, v.y);
@@ -168,7 +168,7 @@ window.PS = window.PS || {};
 
   /* Score a naming: the four markers sit at the corners of the sheet, so the
    * right answer is the one that encloses the most page — weighted down when
-   * the markers disagree about how thick a stroke is, which is what a false
+   * the markers disagree about how big a module is, which is what a false
    * alarm somewhere off the sheet looks like. */
   function score(hits) {
     var order = PS.CORNERS.filter(function (c) { return hits[c]; });
@@ -216,10 +216,10 @@ window.PS = window.PS || {};
     return across > down ? 'L' : 'P';
   }
 
-  /* Re-read one marker from a tight native crop, where a stroke is tens of
-   * pixels rather than four, and take the crook from that. */
+  /* Re-read one marker from a tight native crop, where a module is tens of
+   * pixels rather than four, and take the centre from that. */
   function refine(img, hit, corner) {
-    var pad = hit.module * 14;
+    var pad = hit.module * 12;
     var region = cropRGBA(img, hit.x - pad, hit.y - pad, pad * 2, pad * 2);
     if (!region || region.width < 24 || region.height < 24) return;
     var radius = Math.max(6, Math.round(hit.module * 3));
