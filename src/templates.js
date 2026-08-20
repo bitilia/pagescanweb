@@ -7,19 +7,16 @@ window.PS = window.PS || {};
 (function (PS) {
   'use strict';
 
-  /* Rule colours are pale, but only as pale as printing tolerates: an inkjet
-   * on ordinary paper loses the top of this range altogether, so they sit
-   * roughly halfway to the swatch rather than a whisper above white. They are
-   * still light enough to fall above the scanner's default white point, so a
-   * scanned sheet contains what you wrote and not the paper you wrote it on —
-   * turning ink pickup up brings the rules back for anyone who wants them (a
-   * plotted curve on graph paper, say).
-   * `swatch` is the saturated chip shown in the UI, not a print colour. */
+  /* Rule colours sit close to the UI swatch so an inkjet on ordinary paper
+   * still lays down enough pigment for a flatbed or phone scan to keep them.
+   * They remain lighter than handwriting, so lowering ink pickup can still
+   * wash the guides away when you only want what you wrote.
+   * `swatch` is the saturated chip shown in the UI; print tones track it. */
   var INKS = {
-    slate:   { key: 'slate',   label: 'Slate', swatch: '#9AA3AE', minor: '#C2C7CE', major: '#B7BEC7', accent: '#B1B9C2' },
-    blue:    { key: 'blue',    label: 'Blue',  swatch: '#6FA0E8', minor: '#A9C6F2', major: '#9DBFF0', accent: '#91B8EF' },
-    emerald: { key: 'emerald', label: 'Green', swatch: '#5FC49E', minor: '#A0DCC4', major: '#8FD6BB', accent: '#88D4B7' },
-    amber:   { key: 'amber',   label: 'Amber', swatch: '#E0A94B', minor: '#EECC91', major: '#EAC17B', accent: '#E9BD75' }
+    slate:   { key: 'slate',   label: 'Slate', swatch: '#9AA3AE', minor: '#B0B7C0', major: '#A3ABB5', accent: '#9AA3AE' },
+    blue:    { key: 'blue',    label: 'Blue',  swatch: '#6FA0E8', minor: '#8FB4EC', major: '#7DA8EA', accent: '#6FA0E8' },
+    emerald: { key: 'emerald', label: 'Green', swatch: '#5FC49E', minor: '#7FCEB1', major: '#6DC8A7', accent: '#5FC49E' },
+    amber:   { key: 'amber',   label: 'Amber', swatch: '#E0A94B', minor: '#E6B86A', major: '#E2AE54', accent: '#E0A94B' }
   };
   var INK_ORDER = ['slate', 'blue', 'emerald', 'amber'];
 
@@ -212,7 +209,7 @@ window.PS = window.PS || {};
     if (spec.caption !== false) {
       ops.push({
         k: 'text', x: sheet.w / 2, y: sheet.h - CAPTION_PAD, size: 2.4,
-        fill: '#9097A2', anchor: 'middle', text: captionFor(spec)
+        fill: '#6B7280', anchor: 'middle', text: captionFor(spec)
       });
     }
     return { sheet: sheet, ops: ops };

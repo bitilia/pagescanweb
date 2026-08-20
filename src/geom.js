@@ -243,9 +243,10 @@ window.PS = window.PS || {};
    *   at or below `black` x paper   -> 0, solid black
    *   between                       -> the grey it earned
    *
-   * The white clip is what stops paper texture, the lighting gradient and the
-   * pale printed rules from turning the whole page into a dirty wash; below it
-   * nothing is thresholded away, so a pencil line stays a pencil line. */
+   * The white clip is what stops paper texture and the lighting gradient from
+   * turning the whole page into a dirty wash; below it nothing is thresholded
+   * away, so a pencil line stays a pencil line. Printed rules sit below the
+   * default white point so they survive a scan unless pickup is turned down. */
   function tone(gray, bg, white, black) {
     var out = new Uint8ClampedArray(gray.length);
     var span = white - black;

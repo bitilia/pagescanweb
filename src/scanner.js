@@ -318,9 +318,9 @@ window.PS = window.PS || {};
 
     var strength = opts.strength == null ? 50 : opts.strength;
     /* Slider 0..100 -> white point 0.62..0.94 of the local paper level. Low
-     * keeps only confident ink; high keeps faint pencil and the printed rules.
-     * Everything under the white point is kept as grey, not thresholded, and
-     * the black point is what the darkest ink is stretched to. */
+     * keeps only confident ink (and can wash printed rules away); high keeps
+     * faint pencil. Everything under the white point is kept as grey, not
+     * thresholded, and the black point is what the darkest ink is stretched to. */
     var white = 0.62 + (strength / 100) * 0.32;
     var black = white * 0.42;
 

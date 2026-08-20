@@ -81,8 +81,7 @@ function expectedRuleRows(spec) {
 
 /* Rows where the rectified page is darkest across its width.
    Measured on the greyscale rather than the ink mask: this check is about
-   geometry, and binarisation policy (which deliberately drops pale printed
-   rules at normal settings) would only get in the way. */
+   geometry, and a hard ink mask would only get in the way. */
 function detectedRuleRows(page) {
   const s = page.dpi / MM_PER_IN;
   /* Measure only the span where a rule is actually drawn: rules are clipped

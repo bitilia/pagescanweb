@@ -127,7 +127,7 @@ A whole sheet's markers come to 54 rectangles.
    Nothing is thresholded away below the white point, so pencil stays pencil and
    a shaded diagram stays shaded. **Ink pickup** moves the white point (0.62 to
    0.94 of paper): low keeps only confident ink, high brings in faint pencil and
-   the pale printed rules.
+   the printed rules when ink pickup is low.
 
    Then a despeckle pass drops ink blobs smaller than about a third of a
    millimetre, a hairline of page-edge trim removes the shadow every
@@ -137,10 +137,10 @@ A whole sheet's markers come to 54 rectangles.
    right. Pages are overwhelmingly pure white, which Flate reduces to almost
    nothing: a written A4 sheet at 200dpi lands around 25KB.
 
-Printed rules are pale by design — they sit just above the default white point,
-so a scan contains what you wrote rather than the paper you wrote it on. Raise
-**Ink pickup** to bring the rules back (useful for a curve plotted on graph
-paper) or to catch faint pencil.
+Printed rules are dark enough to survive ordinary inkjet printing and still
+show up at the default **Ink pickup** setting. Lower the slider if you want a
+scan that keeps only what you wrote and washes the guides away; raise it to
+catch faint pencil.
 
 ---
 
